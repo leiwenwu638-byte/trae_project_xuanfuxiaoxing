@@ -1,8 +1,9 @@
 {
   "name": "desktop-health-assistant",
   "version": "0.1.0",
+  "productName": "悬浮小醒",
   "private": true,
-  "description": "Lightweight Electron floating desktop assistant for todos and health reminders.",
+  "description": "悬浮小醒：轻量 Electron 桌面待办和健康提醒助手。",
   "main": "dist/main/index.cjs",
   "type": "module",
   "scripts": {

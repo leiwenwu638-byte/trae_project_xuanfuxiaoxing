@@ -25,6 +25,7 @@ import { WindowManager } from './windows';
 import { createLoginItemSettings } from './loginItemSettings';
 import { log } from './logger';
 import { app } from 'electron';
+import { APP_DISPLAY_NAME, APP_USER_MODEL_ID } from './appMetadata';
 
 const debugWindow = process.argv.includes('--debug-window');
 let store: AppStore;
@@ -34,6 +35,9 @@ let tray: ReturnType<typeof createTray>;
 let todos: TodoStore = {};
 let reminders: HealthReminder[] = [];
 let settings: AppSettings;
+
+app.setName(APP_DISPLAY_NAME);
+app.setAppUserModelId(APP_USER_MODEL_ID);
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

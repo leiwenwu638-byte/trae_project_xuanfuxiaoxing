@@ -69,7 +69,7 @@ export function App() {
       <ReminderPopup
         body={params.get('body') ?? '提醒时间到了。'}
         icon={params.get('icon') ?? '⏰'}
-        title={params.get('title') ?? '健康提醒'}
+        title={params.get('title') ?? '悬浮小醒提醒'}
       />
     );
   }
@@ -78,7 +78,7 @@ export function App() {
     return (
       <main className="flex h-screen flex-col gap-4 bg-white p-5 text-assistant-ink">
         <div>
-          <h1 className="text-[15px] font-semibold">桌面健康助手调试窗口</h1>
+          <h1 className="text-[15px] font-semibold">悬浮小醒调试窗口</h1>
           <p className="mt-1 text-[12px] text-assistant-muted">如果能看到这个窗口，说明 Electron 窗口和页面加载都正常。</p>
         </div>
         <p className="text-[12px] text-assistant-muted">日志位置：D:\desktop-health-assistant\logs\assistant.log</p>

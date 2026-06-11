@@ -3,9 +3,10 @@ import type { BrowserWindow as BrowserWindowType } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { HealthReminder } from '../shared/types';
-import { createAppIcon, createTaskbarBadgeIcon } from './appIcon';
+import { createAppIcon } from './appIcon';
 import { log } from './logger';
 import { getPanelPositionNearAnchor, getTopCenterPosition } from './windowBounds';
+import { createHealthPopupWindowOptions, createHealthWindowOptions, createTodoWindowOptions } from './windowOptions';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,7 @@ export class WindowManager {
   private todoWindow: BrowserWindowType | null = null;
   private healthWindow: BrowserWindowType | null = null;
   private popupWindow: BrowserWindowType | null = null;
+  private todoBadgeCount = 0;
 
   constructor(
     private readonly actions: WindowManagerActions,
@@ -36,24 +38,15 @@ export class WindowManager {
     const position = getPanelPositionNearAnchor(null, display.workArea, panelSize);
     log('createTodoWindow', { debugWindow: this.debugWindow, position, panelSize, workArea: display.workArea });
 
-    this.todoWindow = new BrowserWindow({
-      width: panelSize.width,
-      height: panelSize.height,
-      x: position.x,
-      y: position.y,
-      icon: createAppIcon(),
-      title: '桌面健康助手',
-      frame: true,
-      transparent: false,
-      backgroundColor: '#ffffff',
-      resizable: false,
-      skipTaskbar: false,
-      alwaysOnTop: false,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs')
-      }
-    });
+    this.todoWindow = new BrowserWindow(
+      createTodoWindowOptions({
+        debugWindow: this.debugWindow,
+        icon: createAppIcon(this.todoBadgeCount),
+        panelSize,
+        position,
+        preloadPath: this.preloadPath()
+      })
+    );
 
     this.todoWindow.setMenu(null);
     this.todoWindow.loadURL(this.viewUrl(this.debugWindow ? 'debug' : 'todo'));
@@ -78,20 +71,7 @@ export class WindowManager {
       return;
     }
 
-    this.healthWindow = new BrowserWindow({
-      width: 420,
-      height: 560,
-      icon: createAppIcon(),
-      title: '提醒管理',
-      frame: false,
-      transparent: true,
-      resizable: false,
-      alwaysOnTop: true,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs')
-      }
-    });
+    this.healthWindow = new BrowserWindow(createHealthWindowOptions(createAppIcon(), this.preloadPath()));
     this.healthWindow.loadURL(this.viewUrl('health'));
     this.healthWindow.once('ready-to-show', () => this.healthWindow?.show());
     this.healthWindow.on('closed', () => {
@@ -114,23 +94,14 @@ export class WindowManager {
       body: `已过 ${reminder.intervalMinutes} 分钟，该活动一下了。`
     });
 
-    this.popupWindow = new BrowserWindow({
-      width,
-      height,
-      x: position.x,
-      y: position.y,
-      icon: createAppIcon(),
-      title: '健康提醒',
-      frame: false,
-      transparent: true,
-      resizable: false,
-      skipTaskbar: true,
-      alwaysOnTop: true,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs')
-      }
-    });
+    this.popupWindow = new BrowserWindow(
+      createHealthPopupWindowOptions({
+        icon: createAppIcon(),
+        position,
+        preloadPath: this.preloadPath(),
+        size: { width, height }
+      })
+    );
     this.popupWindow.loadURL(url);
     this.popupWindow.once('ready-to-show', () => this.popupWindow?.showInactive());
     this.popupWindow.on('closed', () => {
@@ -144,8 +115,10 @@ export class WindowManager {
   }
 
   setTodoBadgeCount(count: number): void {
+    this.todoBadgeCount = Math.max(0, count);
     if (!this.todoWindow || this.todoWindow.isDestroyed()) return;
-    this.todoWindow.setOverlayIcon(count > 0 ? createTaskbarBadgeIcon(count) : null, count > 0 ? `${count} 个未完成待办` : '');
+    this.todoWindow.setIcon(createAppIcon(this.todoBadgeCount));
+    this.todoWindow.setOverlayIcon(null, this.todoBadgeCount > 0 ? `${this.todoBadgeCount} 个未完成待办` : '');
   }
 
   broadcast(channel: string, value: unknown): void {
@@ -173,5 +146,9 @@ export class WindowManager {
       url.searchParams.set(key, value);
     }
     return url.toString();
+  }
+
+  private preloadPath(): string {
+    return path.join(__dirname, 'preload.cjs');
   }
 }
