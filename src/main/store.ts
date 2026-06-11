@@ -17,11 +17,15 @@ export class AppStore {
 
   async load(): Promise<PersistedSnapshot> {
     await mkdir(this.dataDir, { recursive: true });
-    const [todos, reminders, settings] = await Promise.all([
+    const [todos, reminders, rawSettings] = await Promise.all([
       this.readJson<TodoStore>('todos.json', {}),
       this.readJson<HealthReminder[]>('reminders.json', createDefaultHealthReminders(this.startupDate)),
       this.readJson<AppSettings>('settings.json', createDefaultSettings())
     ]);
+    const settings = normalizeSettings(rawSettings);
+    if (JSON.stringify(settings) !== JSON.stringify(rawSettings)) {
+      await this.saveSettings(settings);
+    }
 
     return { todos, reminders, settings };
   }
@@ -82,4 +86,26 @@ export class AppStore {
 
 function isMissingFile(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}
+
+function normalizeSettings(settings: AppSettings): AppSettings {
+  const defaults = createDefaultSettings();
+  return {
+    general: {
+      ...defaults.general,
+      ...settings.general
+    },
+    todo: {
+      ...defaults.todo,
+      ...settings.todo,
+      advanceReminderMinutes:
+        settings.todo?.advanceReminderMinutes && settings.todo.advanceReminderMinutes > 0
+          ? settings.todo.advanceReminderMinutes
+          : defaults.todo.advanceReminderMinutes
+    },
+    ballPosition: {
+      ...defaults.ballPosition,
+      ...settings.ballPosition
+    }
+  };
 }

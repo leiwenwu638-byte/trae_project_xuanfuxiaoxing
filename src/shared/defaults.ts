@@ -11,7 +11,7 @@ export function createDefaultSettings(): AppSettings {
       soundEnabled: true
     },
     todo: {
-      advanceReminderMinutes: 0
+      advanceReminderMinutes: 10
     },
     ballPosition: {
       x: 120,

@@ -19,12 +19,13 @@ export function createTodoWindowOptions(input: {
     y: input.position.y,
     icon: input.icon,
     title: input.debugWindow ? `${APP_DISPLAY_NAME} - 调试` : APP_DISPLAY_NAME,
-    frame: true,
-    transparent: false,
-    backgroundColor: '#ffffff',
-    resizable: false,
+    frame: input.debugWindow,
+    transparent: !input.debugWindow,
+    backgroundColor: input.debugWindow ? '#ffffff' : '#00000000',
+    resizable: input.debugWindow,
     skipTaskbar: false,
     alwaysOnTop: false,
+    hasShadow: true,
     show: false,
     webPreferences: {
       preload: input.preloadPath

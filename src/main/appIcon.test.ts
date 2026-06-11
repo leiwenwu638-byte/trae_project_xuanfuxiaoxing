@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createAppIconSvg } from './appIcon';
+import path from 'node:path';
+import { createAppIconSvg, resolveAppIconPath } from './appIcon';
 
 describe('createAppIconSvg', () => {
   it('renders the new Xuanfu Xiaoxing app icon artwork', () => {
@@ -24,5 +25,9 @@ describe('createAppIconSvg', () => {
 
   it('does not render a badge when there are no unfinished todos', () => {
     expect(createAppIconSvg(0)).not.toContain('unfinished-todo-badge');
+  });
+
+  it('resolves the normal taskbar icon to a real PNG asset', () => {
+    expect(resolveAppIconPath()).toBe(path.join(process.cwd(), 'assets', 'app-icon.png'));
   });
 });

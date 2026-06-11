@@ -56,6 +56,37 @@ describe('AppStore', () => {
     expect(files.some((file) => file.startsWith('settings.json.corrupt-'))).toBe(true);
     expect(JSON.parse(await readFile(path.join(dir, 'settings.json'), 'utf-8')).general.ballSize).toBe('medium');
   });
+
+  it('migrates old settings so todo advance reminders are enabled', async () => {
+    const dir = await tempDir();
+    await writeFile(
+      path.join(dir, 'settings.json'),
+      JSON.stringify({
+        general: {
+          autoLaunch: true,
+          ballOpacity: 0.7,
+          ballSize: 'medium',
+          rememberPosition: true,
+          soundEnabled: true
+        },
+        todo: {
+          advanceReminderMinutes: 0
+        },
+        ballPosition: {
+          x: 120,
+          y: 160
+        }
+      }),
+      'utf-8'
+    );
+    const store = new AppStore(dir, new Date('2026-06-10T09:00:00.000Z'));
+
+    const snapshot = await store.load();
+    const persistedSettings = JSON.parse(await readFile(path.join(dir, 'settings.json'), 'utf-8'));
+
+    expect(snapshot.settings.todo.advanceReminderMinutes).toBe(10);
+    expect(persistedSettings.todo.advanceReminderMinutes).toBe(10);
+  });
 });
 
 async function tempDir(): Promise<string> {

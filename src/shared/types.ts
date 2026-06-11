@@ -5,6 +5,7 @@ export type Todo = {
   title: string;
   reminderTime: string | null;
   completed: boolean;
+  advanceRemindedAt?: string | null;
   remindedAt: string | null;
   createdAt: string;
 };
@@ -59,9 +60,12 @@ export type AddTodoInput = {
   reminderTime: string | null;
 };
 
+export type UpdateTodoInput = AddTodoInput;
+
 export type AssistantApi = {
   getSnapshot: () => Promise<AppSnapshot>;
   addTodo: (input: AddTodoInput) => Promise<AppSnapshot>;
+  updateTodo: (id: string, input: UpdateTodoInput) => Promise<AppSnapshot>;
   toggleTodo: (id: string) => Promise<AppSnapshot>;
   deleteTodo: (id: string) => Promise<AppSnapshot>;
   snoozeTodo: (id: string, minutes: number) => Promise<AppSnapshot>;

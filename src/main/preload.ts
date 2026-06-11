@@ -1,9 +1,10 @@
-import type { AddHealthReminderInput, AddTodoInput, AppSnapshot, AssistantApi, UpdateHealthReminderInput } from '../shared/types';
+import type { AddHealthReminderInput, AddTodoInput, AppSnapshot, AssistantApi, UpdateHealthReminderInput, UpdateTodoInput } from '../shared/types';
 import { contextBridge, ipcRenderer } from 'electron';
 
 const assistant: AssistantApi = {
   getSnapshot: () => ipcRenderer.invoke('snapshot:get'),
   addTodo: (input: AddTodoInput) => ipcRenderer.invoke('todo:add', input),
+  updateTodo: (id: string, input: UpdateTodoInput) => ipcRenderer.invoke('todo:update', id, input),
   toggleTodo: (id: string) => ipcRenderer.invoke('todo:toggle', id),
   deleteTodo: (id: string) => ipcRenderer.invoke('todo:delete', id),
   snoozeTodo: (id: string, minutes: number) => ipcRenderer.invoke('todo:snooze', id, minutes),

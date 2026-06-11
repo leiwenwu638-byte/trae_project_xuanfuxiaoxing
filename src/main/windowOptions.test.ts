@@ -23,4 +23,18 @@ describe('window options', () => {
     expect(options.skipTaskbar).toBe(false);
     expect(options.title).toBe(APP_DISPLAY_NAME);
   });
+
+  it('renders the todo panel without the system title bar', () => {
+    const options = createTodoWindowOptions({
+      debugWindow: false,
+      icon: 'app-icon',
+      panelSize: { width: 400, height: 590 },
+      position: { x: 10, y: 20 },
+      preloadPath: 'preload.cjs'
+    });
+
+    expect(options.frame).toBe(false);
+    expect(options.transparent).toBe(true);
+    expect(options.backgroundColor).toBe('#00000000');
+  });
 });

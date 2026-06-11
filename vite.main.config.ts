@@ -9,7 +9,7 @@ export default defineConfig({
   },
   build: {
     ssr: true,
-    emptyOutDir: false,
+    emptyOutDir: true,
     sourcemap: true,
     minify: false,
     target: 'node22',

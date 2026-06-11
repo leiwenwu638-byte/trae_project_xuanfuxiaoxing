@@ -1,9 +1,24 @@
 import { nativeImage } from 'electron';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { createTaskbarBadgeSvg } from './taskbarBadge';
 
 export function createAppIcon(unfinishedTodoCount = 0) {
+  if (unfinishedTodoCount <= 0) {
+    const assetIcon = nativeImage.createFromPath(resolveAppIconPath());
+    if (!assetIcon.isEmpty()) return assetIcon;
+  }
+
   const svg = createAppIconSvg(unfinishedTodoCount);
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
+export function hasAppIconAsset(): boolean {
+  return existsSync(resolveAppIconPath());
+}
+
+export function resolveAppIconPath(): string {
+  return path.join(process.cwd(), 'assets', 'app-icon.png');
 }
 
 export function createTaskbarBadgeIcon(count: number) {

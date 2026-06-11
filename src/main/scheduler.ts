@@ -1,11 +1,12 @@
 import { findDueHealthReminders, resetDueHealthReminder } from '../shared/reminderService';
-import { findDueTodos, markTodoReminded } from '../shared/todoService';
+import { findDueTodos, findUpcomingTodos, markTodoAdvanceReminded, markTodoReminded } from '../shared/todoService';
 import type { HealthReminder, Todo, TodoStore } from '../shared/types';
 
 type SchedulerState = {
   today: string;
   todos: TodoStore;
   reminders: HealthReminder[];
+  advanceReminderMinutes?: number;
 };
 
 type SchedulerDependencies = {
@@ -15,6 +16,7 @@ type SchedulerDependencies = {
   saveTodos: (todos: TodoStore) => Promise<void> | void;
   saveReminders: (reminders: HealthReminder[]) => Promise<void> | void;
   notifyTodo: (todo: Todo) => void;
+  notifyUpcomingTodo: (todo: Todo) => void;
   notifyHealth: (reminder: HealthReminder) => void;
 };
 
@@ -43,10 +45,16 @@ export class AssistantScheduler {
 
   private async tickTodos(now: Date): Promise<void> {
     const state = this.dependencies.getState();
+    const upcomingTodos = findUpcomingTodos(state.todos, state.today, now, state.advanceReminderMinutes ?? 10);
     const dueTodos = findDueTodos(state.todos, state.today, now);
-    if (dueTodos.length === 0) return;
+    if (upcomingTodos.length === 0 && dueTodos.length === 0) return;
 
     let nextTodos = state.todos;
+    for (const todo of upcomingTodos) {
+      this.dependencies.notifyUpcomingTodo(todo);
+      nextTodos = markTodoAdvanceReminded(nextTodos, state.today, todo.id, now);
+    }
+
     for (const todo of dueTodos) {
       this.dependencies.notifyTodo(todo);
       nextTodos = markTodoReminded(nextTodos, state.today, todo.id, now);

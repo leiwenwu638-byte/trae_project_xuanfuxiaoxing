@@ -53,6 +53,18 @@ input {
   animation: reminder-popup-drop 220ms ease-out both;
 }
 
+.todo-form-enter {
+  animation: todo-form-slide 180ms ease-out both;
+}
+
+.todo-row-enter {
+  animation: todo-row-rise 180ms ease-out both;
+}
+
+.todo-time-pop {
+  animation: todo-time-pop 260ms ease-out both;
+}
+
 @keyframes reminder-popup-drop {
   from {
     opacity: 0;
@@ -64,8 +76,45 @@ input {
   }
 }
 
+@keyframes todo-form-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes todo-row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes todo-time-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.015);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .reminder-popup-enter {
+  .reminder-popup-enter,
+  .todo-form-enter,
+  .todo-row-enter,
+  .todo-time-pop {
     animation: none;
   }
 }

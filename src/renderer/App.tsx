@@ -3,7 +3,7 @@ import { createDefaultHealthReminders, createDefaultSettings } from '../shared/d
 import { HealthWindow } from './components/HealthWindow';
 import { ReminderPopup } from './components/ReminderPopup';
 import { TodoPanel } from './components/TodoPanel';
-import type { AddHealthReminderInput, AddTodoInput, AppSnapshot, UpdateHealthReminderInput } from '../shared/types';
+import type { AddHealthReminderInput, AddTodoInput, AppSnapshot, UpdateHealthReminderInput, UpdateTodoInput } from '../shared/types';
 
 const fallbackSnapshot: AppSnapshot = {
   today: new Date().toISOString().slice(0, 10),
@@ -43,6 +43,7 @@ export function App() {
         onClose={() => window.close()}
         onToggle={(id) => void window.assistant.toggleTodo(id).then(setSnapshot)}
         onDelete={(id) => void window.assistant.deleteTodo(id).then(setSnapshot)}
+        onUpdate={(id: string, input: UpdateTodoInput) => void window.assistant.updateTodo(id, input).then(setSnapshot)}
       />
     );
   }

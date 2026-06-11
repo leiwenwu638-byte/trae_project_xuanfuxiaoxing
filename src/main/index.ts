@@ -1,4 +1,4 @@
-import { addTodo, deleteTodo, snoozeTodo, toggleTodo } from '../shared/todoService';
+import { addTodo, deleteTodo, snoozeTodo, toggleTodo, updateTodo as updateTodoItem } from '../shared/todoService';
 import {
   addHealthReminder,
   deleteHealthReminder,
@@ -14,7 +14,8 @@ import type {
   AppSnapshot,
   HealthReminder,
   TodoStore,
-  UpdateHealthReminderInput
+  UpdateHealthReminderInput,
+  UpdateTodoInput
 } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
 import { notifyHealth, notifyTodo } from './notifications';
@@ -99,6 +100,11 @@ app.whenReady().then(async () => {
       await store.saveTodos(todos);
       return publish();
     },
+    updateTodo: async (id: string, input: UpdateTodoInput) => {
+      todos = updateTodoItem(todos, today(), id, input);
+      await store.saveTodos(todos);
+      return publish();
+    },
     toggleTodo: async (id) => {
       todos = toggleTodo(todos, today(), id);
       await store.saveTodos(todos);
@@ -140,7 +146,7 @@ app.whenReady().then(async () => {
   });
 
   scheduler = new AssistantScheduler({
-    getState: () => ({ today: today(), todos, reminders }),
+    getState: () => ({ today: today(), todos, reminders, advanceReminderMinutes: settings.todo.advanceReminderMinutes }),
     updateTodos: (next) => {
       todos = next;
       publish();
@@ -152,6 +158,7 @@ app.whenReady().then(async () => {
     saveTodos: (next) => store.saveTodos(next),
     saveReminders: (next) => store.saveReminders(next),
     notifyTodo,
+    notifyUpcomingTodo: (todo) => windows.showTodoAdvancePopup(todo),
     notifyHealth: (reminder) => {
       notifyHealth(reminder);
       windows.showHealthPopup(reminder);

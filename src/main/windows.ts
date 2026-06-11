@@ -2,8 +2,8 @@ import { BrowserWindow, screen } from 'electron';
 import type { BrowserWindow as BrowserWindowType } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { HealthReminder } from '../shared/types';
-import { createAppIcon } from './appIcon';
+import type { HealthReminder, Todo } from '../shared/types';
+import { createAppIcon, createTaskbarBadgeIcon } from './appIcon';
 import { log } from './logger';
 import { getPanelPositionNearAnchor, getTopCenterPosition } from './windowBounds';
 import { createHealthPopupWindowOptions, createHealthWindowOptions, createTodoWindowOptions } from './windowOptions';
@@ -33,7 +33,7 @@ export class WindowManager {
       return;
     }
 
-    const panelSize = this.debugWindow ? { width: 380, height: 620 } : { width: 340, height: 590 };
+    const panelSize = this.debugWindow ? { width: 440, height: 620 } : { width: 400, height: 590 };
     const display = screen.getPrimaryDisplay();
     const position = getPanelPositionNearAnchor(null, display.workArea, panelSize);
     log('createTodoWindow', { debugWindow: this.debugWindow, position, panelSize, workArea: display.workArea });
@@ -80,6 +80,24 @@ export class WindowManager {
   }
 
   showHealthPopup(reminder: HealthReminder): void {
+    this.showPopup({
+      body: `已过 ${reminder.intervalMinutes} 分钟，该活动一下了。`,
+      icon: reminder.icon,
+      title: reminder.name,
+      durationMs: 30_000
+    });
+  }
+
+  showTodoAdvancePopup(todo: Todo): void {
+    this.showPopup({
+      body: `「${todo.title}」还有 10 分钟就到时间了。`,
+      icon: '⏰',
+      title: '今日待办提醒',
+      durationMs: 3_000
+    });
+  }
+
+  private showPopup(input: { body: string; durationMs: number; icon: string; title: string }): void {
     if (this.popupWindow && !this.popupWindow.isDestroyed()) {
       this.popupWindow.close();
     }
@@ -89,9 +107,9 @@ export class WindowManager {
     const height = 180;
     const position = getTopCenterPosition(display.workArea, { width, height });
     const url = this.viewUrl('popup', {
-      icon: reminder.icon,
-      title: reminder.name,
-      body: `已过 ${reminder.intervalMinutes} 分钟，该活动一下了。`
+      icon: input.icon,
+      title: input.title,
+      body: input.body
     });
 
     this.popupWindow = new BrowserWindow(
@@ -111,14 +129,17 @@ export class WindowManager {
       if (this.popupWindow && !this.popupWindow.isDestroyed()) {
         this.popupWindow.close();
       }
-    }, 30_000);
+    }, input.durationMs);
   }
 
   setTodoBadgeCount(count: number): void {
     this.todoBadgeCount = Math.max(0, count);
     if (!this.todoWindow || this.todoWindow.isDestroyed()) return;
     this.todoWindow.setIcon(createAppIcon(this.todoBadgeCount));
-    this.todoWindow.setOverlayIcon(null, this.todoBadgeCount > 0 ? `${this.todoBadgeCount} 个未完成待办` : '');
+    this.todoWindow.setOverlayIcon(
+      this.todoBadgeCount > 0 ? createTaskbarBadgeIcon(this.todoBadgeCount) : null,
+      this.todoBadgeCount > 0 ? `${this.todoBadgeCount} 个未完成待办` : ''
+    );
   }
 
   broadcast(channel: string, value: unknown): void {
