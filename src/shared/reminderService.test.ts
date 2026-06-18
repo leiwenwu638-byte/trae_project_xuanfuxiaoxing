@@ -16,7 +16,9 @@ const baseReminder: HealthReminder = {
   name: '定时喝水',
   icon: '💧',
   intervalMinutes: 30,
+  message: '已过 30 分钟，该活动一下了！',
   soundEnabled: true,
+  soundFilePath: null,
   enabled: true,
   lastTriggeredAt: null,
   nextTriggerAt: null
@@ -27,6 +29,20 @@ describe('reminderService', () => {
     const initialized = initializeHealthReminders([baseReminder], new Date('2026-06-10T09:00:00.000Z'));
 
     expect(initialized[0].nextTriggerAt).toBe('2026-06-10T09:30:00.000Z');
+  });
+
+  it('fills default messages for legacy reminders', () => {
+    const legacyReminder = { ...baseReminder, message: undefined } as unknown as HealthReminder;
+    const initialized = initializeHealthReminders([legacyReminder], new Date('2026-06-10T09:00:00.000Z'));
+
+    expect(initialized[0].message).toBe('已过 30 分钟，该活动一下了！');
+  });
+
+  it('fills missing sound file paths for legacy reminders', () => {
+    const legacyReminder = { ...baseReminder, soundFilePath: undefined } as unknown as HealthReminder;
+    const initialized = initializeHealthReminders([legacyReminder], new Date('2026-06-10T09:00:00.000Z'));
+
+    expect(initialized[0].soundFilePath).toBeNull();
   });
 
   it('pauses and resumes reminders', () => {
@@ -71,7 +87,8 @@ describe('reminderService', () => {
     const reminders = addHealthReminder([], {
       name: '拉伸',
       intervalMinutes: 20,
-      soundEnabled: false,
+      message: '站起来拉伸肩颈！',
+      soundFilePath: 'D:\\Sounds\\ice.wav',
       now: new Date('2026-06-10T09:00:00.000Z')
     });
 
@@ -79,7 +96,9 @@ describe('reminderService', () => {
       name: '拉伸',
       icon: '⏰',
       intervalMinutes: 20,
-      soundEnabled: false,
+      message: '站起来拉伸肩颈！',
+      soundEnabled: true,
+      soundFilePath: 'D:\\Sounds\\ice.wav',
       enabled: true,
       lastTriggeredAt: null,
       nextTriggerAt: '2026-06-10T09:20:00.000Z'
@@ -99,6 +118,7 @@ describe('reminderService', () => {
           name: 'Stretch',
           intervalMinutes: 20,
           soundEnabled: false,
+          soundFilePath: null,
           nextTriggerAt: '2026-06-10T09:20:00.000Z'
         }
       ],
@@ -106,7 +126,8 @@ describe('reminderService', () => {
       {
         name: 'Walk',
         intervalMinutes: 45,
-        soundEnabled: true,
+        message: '离开座位走一走！',
+        soundFilePath: 'D:\\Sounds\\walk.wav',
         now: new Date('2026-06-10T09:05:00.000Z')
       }
     );
@@ -115,11 +136,13 @@ describe('reminderService', () => {
       id: 'custom',
       name: 'Walk',
       intervalMinutes: 45,
+      message: '离开座位走一走！',
       soundEnabled: true,
+      soundFilePath: 'D:\\Sounds\\walk.wav',
       nextTriggerAt: '2026-06-10T09:50:00.000Z'
     });
 
-    expect(() => updateHealthReminder([baseReminder], 'drink', { name: '', intervalMinutes: 30, soundEnabled: true })).toThrow(
+    expect(() => updateHealthReminder([baseReminder], 'drink', { name: '', intervalMinutes: 30, soundFilePath: null })).toThrow(
       '提醒名称不能为空'
     );
   });

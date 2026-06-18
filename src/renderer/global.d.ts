@@ -1,8 +1,11 @@
-import type { AssistantApi } from '../shared/types';
-
 declare global {
   interface Window {
-    assistant: AssistantApi;
+    __REMINDER_POPUP_PAYLOAD__?: {
+      title: string;
+      body: string;
+      icon?: string;
+      soundSrc?: string | null;
+    };
   }
 }
 

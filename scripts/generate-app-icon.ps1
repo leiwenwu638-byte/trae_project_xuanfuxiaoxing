@@ -138,11 +138,18 @@ $pngPath = Join-Path $assetDir 'app-icon.png'
 $icoPath = Join-Path $assetDir 'app-icon.ico'
 $bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
-$icon = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
-$stream = [System.IO.File]::Create($icoPath)
-$icon.Save($stream)
-$stream.Close()
-$icon.Dispose()
+$pngBytes = [System.IO.File]::ReadAllBytes($pngPath)
+$icoHeader = New-Object byte[] 22
+$icoHeader[2] = 1
+$icoHeader[4] = 1
+$icoHeader[10] = 1
+$icoHeader[12] = 32
+[System.BitConverter]::GetBytes([UInt32]$pngBytes.Length).CopyTo($icoHeader, 14)
+[System.BitConverter]::GetBytes([UInt32]22).CopyTo($icoHeader, 18)
+$icoBytes = New-Object byte[] ($icoHeader.Length + $pngBytes.Length)
+[System.Array]::Copy($icoHeader, 0, $icoBytes, 0, $icoHeader.Length)
+[System.Array]::Copy($pngBytes, 0, $icoBytes, $icoHeader.Length, $pngBytes.Length)
+[System.IO.File]::WriteAllBytes($icoPath, $icoBytes)
 
 $graphics.Dispose()
 $bitmap.Dispose()

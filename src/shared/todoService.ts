@@ -1,5 +1,6 @@
 import { addMinutes, isTimeDue, toTimeString } from './date';
 import type { AddTodoInput, Todo, TodoStore, UpdateTodoInput } from './types';
+import { TODO_PRIORITY_DEFAULT } from './types';
 
 type AddTodoOptions = AddTodoInput & {
   now?: Date;
@@ -12,7 +13,10 @@ export function addTodo(store: TodoStore, dateKey: string, input: AddTodoOptions
     id: createId(),
     title,
     reminderTime: input.reminderTime || null,
+    soundEnabled: input.soundEnabled ?? true,
     completed: false,
+    // 与 Rust `TodoPriority::default()` = `medium` 对齐：未传 → 中等。
+    priority: input.priority ?? TODO_PRIORITY_DEFAULT,
     advanceRemindedAt: null,
     remindedAt: null,
     createdAt: now.toISOString()
@@ -37,6 +41,10 @@ export function updateTodo(store: TodoStore, dateKey: string, id: string, input:
     ...todo,
     title,
     reminderTime: input.reminderTime || null,
+    soundEnabled: input.soundEnabled ?? todo.soundEnabled ?? true,
+    // 与 Rust `update_todo` 内 `if let Some(priority)` 守卫语义一致：
+    // input.priority 缺失/为 null → 保持原值；传值 → 覆盖。
+    priority: input.priority ?? todo.priority ?? TODO_PRIORITY_DEFAULT,
     advanceRemindedAt: null,
     remindedAt: null
   }));

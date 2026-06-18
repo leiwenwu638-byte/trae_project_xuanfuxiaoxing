@@ -1,4 +1,5 @@
 import { addMinutes } from './date';
+import { createDefaultHealthReminderMessage } from './reminderContent';
 import type { AppSettings, HealthReminder } from './types';
 
 export function createDefaultSettings(): AppSettings {
@@ -40,7 +41,9 @@ function createReminder(
     name,
     icon,
     intervalMinutes,
+    message: createDefaultHealthReminderMessage(intervalMinutes),
     soundEnabled: true,
+    soundFilePath: null,
     enabled: true,
     lastTriggeredAt: null,
     nextTriggerAt: addMinutes(now, intervalMinutes).toISOString()

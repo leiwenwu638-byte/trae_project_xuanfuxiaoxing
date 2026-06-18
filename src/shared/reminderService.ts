@@ -1,25 +1,27 @@
 import { addMinutes } from './date';
+import { MAX_HEALTH_REMINDER_MESSAGE_LENGTH, normalizeHealthReminderMessage } from './reminderContent';
 import type { AddHealthReminderInput, HealthReminder, UpdateHealthReminderInput } from './types';
 
-type AddHealthReminderOptions = Omit<AddHealthReminderInput, 'soundEnabled'> & {
-  soundEnabled?: boolean;
+type AddHealthReminderOptions = Omit<AddHealthReminderInput, 'message' | 'soundFilePath'> & {
+  message?: string;
+  soundFilePath?: string | null;
   now?: Date;
 };
 
-type UpdateHealthReminderOptions = Omit<UpdateHealthReminderInput, 'soundEnabled'> & {
-  soundEnabled?: boolean;
+type UpdateHealthReminderOptions = Omit<UpdateHealthReminderInput, 'message' | 'soundFilePath'> & {
+  message?: string;
+  soundFilePath?: string | null;
   now?: Date;
 };
 
 export function initializeHealthReminders(reminders: HealthReminder[], now = new Date()): HealthReminder[] {
-  return reminders.map((reminder) =>
-    reminder.nextTriggerAt
-      ? reminder
-      : {
-          ...reminder,
-          nextTriggerAt: addMinutes(now, reminder.intervalMinutes).toISOString()
-        }
-  );
+  return reminders.map((reminder) => ({
+    ...reminder,
+    message: normalizeHealthReminderMessage(reminder.message, reminder.intervalMinutes),
+    soundEnabled: reminder.soundEnabled ?? Boolean(reminder.soundFilePath),
+    soundFilePath: reminder.soundFilePath ?? null,
+    nextTriggerAt: reminder.nextTriggerAt ?? addMinutes(now, reminder.intervalMinutes).toISOString()
+  }));
 }
 
 export function toggleHealthReminder(reminders: HealthReminder[], id: string, now = new Date()): HealthReminder[] {
@@ -37,6 +39,7 @@ export function toggleHealthReminder(reminders: HealthReminder[], id: string, no
 export function addHealthReminder(reminders: HealthReminder[], input: AddHealthReminderOptions): HealthReminder[] {
   const name = validateReminderName(input.name);
   const intervalMinutes = validateInterval(input.intervalMinutes);
+  const message = validateReminderMessage(input.message, intervalMinutes);
   const now = input.now ?? new Date();
 
   return [
@@ -46,7 +49,9 @@ export function addHealthReminder(reminders: HealthReminder[], input: AddHealthR
       name,
       icon: '⏰',
       intervalMinutes,
-      soundEnabled: input.soundEnabled ?? true,
+      message,
+      soundEnabled: Boolean(input.soundFilePath),
+      soundFilePath: input.soundFilePath ?? null,
       enabled: true,
       lastTriggeredAt: null,
       nextTriggerAt: addMinutes(now, intervalMinutes).toISOString()
@@ -61,6 +66,7 @@ export function updateHealthReminder(
 ): HealthReminder[] {
   const name = validateReminderName(input.name);
   const intervalMinutes = validateInterval(input.intervalMinutes);
+  const message = validateReminderMessage(input.message, intervalMinutes);
   const now = input.now ?? new Date();
 
   return reminders.map((reminder) => {
@@ -69,7 +75,9 @@ export function updateHealthReminder(
       ...reminder,
       name,
       intervalMinutes,
-      soundEnabled: input.soundEnabled ?? reminder.soundEnabled,
+      message,
+      soundEnabled: Boolean(input.soundFilePath),
+      soundFilePath: input.soundFilePath ?? null,
       nextTriggerAt: reminder.enabled ? addMinutes(now, intervalMinutes).toISOString() : reminder.nextTriggerAt
     };
   });
@@ -126,6 +134,14 @@ function validateInterval(intervalMinutes: number): number {
   if (intervalMinutes < 5) throw new Error('间隔时长不能少于 5 分钟');
   if (intervalMinutes > 480) throw new Error('间隔时长不能超过 480 分钟');
   return Math.round(intervalMinutes);
+}
+
+function validateReminderMessage(rawMessage: string | undefined, intervalMinutes: number): string {
+  const message = normalizeHealthReminderMessage(rawMessage, intervalMinutes);
+  if ([...message].length > MAX_HEALTH_REMINDER_MESSAGE_LENGTH) {
+    throw new Error(`提醒内容不能超过 ${MAX_HEALTH_REMINDER_MESSAGE_LENGTH} 字`);
+  }
+  return message;
 }
 
 function createReminderId(): string {

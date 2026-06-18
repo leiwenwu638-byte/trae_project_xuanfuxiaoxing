@@ -3,39 +3,35 @@
   "version": "0.1.0",
   "productName": "悬浮小醒",
   "private": true,
-  "description": "悬浮小醒：轻量 Electron 桌面待办和健康提醒助手。",
-  "main": "dist/main/index.cjs",
+  "description": "悬浮小醒：轻量 Tauri 托盘常驻式学习工作节律助手。",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"vite build --config vite.main.config.ts --watch\" \"wait-on tcp:5173 dist/main/index.cjs && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 node scripts/start-electron.mjs dist/main/index.cjs\"",
-    "build": "vite build && vite build --config vite.main.config.ts",
-    "start": "node scripts/start-electron.mjs dist/main/index.cjs",
-    "start:debug": "node scripts/start-electron.mjs dist/main/index.cjs --debug-window",
+    "build": "vite build",
+    "dev:vite": "vite --host 127.0.0.1",
+    "tauri:dev": "tauri dev",
     "test": "vitest",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
-    "autoprefixer": "^10.4.21",
-    "concurrently": "^9.2.1",
-    "cross-env": "^10.0.0",
-    "electron": "^39.2.6",
-    "lucide-react": "^0.555.0",
-    "postcss": "^8.5.6",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "tailwindcss": "^3.4.18",
-    "vite": "^7.2.6",
-    "wait-on": "^9.0.3"
+    "@tauri-apps/api": "^2.0.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
     "jsdom": "^27.2.0",
+    "lucide-react": "^0.555.0",
+    "postcss": "^8.5.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
+    "vite": "^7.2.6",
     "vitest": "^4.0.14"
   }
 }

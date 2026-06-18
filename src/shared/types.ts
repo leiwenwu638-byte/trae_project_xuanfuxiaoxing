@@ -1,10 +1,39 @@
 export type BallSize = 'small' | 'medium' | 'large';
+/** @deprecated 悬浮球路线已于第八阶段永久取消；该类型仅作 disk 占位。 */
+export type BallSize_DEPRECATED = BallSize;
+
+/**
+ * 待办优先级。稳定英文枚举，与 Rust `models::TodoPriority` 一一对应：
+ *   - `critical` 特别重要（红色）
+ *   - `high`     重要（橙色）
+ *   - `medium`   中等（紫色 / 默认）
+ *   - `low`      一般（绿色）
+ *
+ * 中文标签仅在 UI 层映射；存储 / IPC 走英文小写字面量，与 serde `rename_all` 一致。
+ */
+export type TodoPriority = 'critical' | 'high' | 'medium' | 'low';
+
+export const TODO_PRIORITY_LABEL: Record<TodoPriority, string> = {
+  critical: '特别重要',
+  high: '重要',
+  medium: '中等',
+  low: '一般'
+};
+
+export const TODO_PRIORITY_DEFAULT: TodoPriority = 'medium';
 
 export type Todo = {
   id: string;
   title: string;
   reminderTime: string | null;
+  soundEnabled: boolean;
   completed: boolean;
+  /**
+   * 任务优先级。读取老 todos.json（无该字段）时由 `App.tsx` 的
+   * `migrateTodoPriority` 兜底为 `TODO_PRIORITY_DEFAULT`，与 Rust 端
+   * `TodoPriority::default() = Medium` 行为一致。
+   */
+  priority: TodoPriority;
   advanceRemindedAt?: string | null;
   remindedAt: string | null;
   createdAt: string;
@@ -17,7 +46,9 @@ export type HealthReminder = {
   name: string;
   icon: string;
   intervalMinutes: number;
+  message: string;
   soundEnabled: boolean;
+  soundFilePath: string | null;
   enabled: boolean;
   lastTriggeredAt: string | null;
   nextTriggerAt: string | null;
@@ -26,7 +57,8 @@ export type HealthReminder = {
 export type AddHealthReminderInput = {
   name: string;
   intervalMinutes: number;
-  soundEnabled: boolean;
+  message: string;
+  soundFilePath: string | null;
 };
 
 export type UpdateHealthReminderInput = AddHealthReminderInput;
@@ -34,14 +66,29 @@ export type UpdateHealthReminderInput = AddHealthReminderInput;
 export type AppSettings = {
   general: {
     autoLaunch: boolean;
+    /**
+     * 悬浮球遗留字段（deprecated）。
+     *
+     * 来自早期悬浮球设计。悬浮球路线已于第八阶段**永久取消**，
+     * 系统托盘成为应用唯一常驻入口。当前 Tauri 路径不再读写本字段，
+     * 仅保留以兼容老 settings.json 落盘数据。
+     *
+     * 清理路径：必须走 settings 数据迁移版本，不能直接改 type。
+     */
     ballOpacity: number;
+    /** @deprecated 悬浮球遗留字段，详见 GeneralSettings.ballOpacity。 */
     ballSize: BallSize;
+    /** @deprecated 悬浮球遗留字段，详见 GeneralSettings.ballOpacity。 */
     rememberPosition: boolean;
     soundEnabled: boolean;
   };
   todo: {
     advanceReminderMinutes: number;
   };
+  /**
+   * 悬浮球位置（deprecated）。Tauri 路径不再读写，仅作磁盘占位。
+   * 清理路径：必须走 settings 数据迁移版本。
+   */
   ballPosition: {
     x: number;
     y: number;
@@ -58,23 +105,22 @@ export type AppSnapshot = {
 export type AddTodoInput = {
   title: string;
   reminderTime: string | null;
+  soundEnabled?: boolean;
+  /**
+   * 新增待办优先级。可选——不传或传 `null` 时由 Rust 端走
+   * `TodoPriority::default()` = `medium`，与"未选默认中等"语义一致。
+   */
+  priority?: TodoPriority | null;
 };
 
-export type UpdateTodoInput = AddTodoInput;
-
-export type AssistantApi = {
-  getSnapshot: () => Promise<AppSnapshot>;
-  addTodo: (input: AddTodoInput) => Promise<AppSnapshot>;
-  updateTodo: (id: string, input: UpdateTodoInput) => Promise<AppSnapshot>;
-  toggleTodo: (id: string) => Promise<AppSnapshot>;
-  deleteTodo: (id: string) => Promise<AppSnapshot>;
-  snoozeTodo: (id: string, minutes: number) => Promise<AppSnapshot>;
-  toggleTodoPanel: () => Promise<void>;
-  openHealthWindow: () => Promise<void>;
-  addHealthReminder: (input: AddHealthReminderInput) => Promise<AppSnapshot>;
-  updateHealthReminder: (id: string, input: UpdateHealthReminderInput) => Promise<AppSnapshot>;
-  deleteHealthReminder: (id: string) => Promise<AppSnapshot>;
-  toggleHealthReminder: (id: string) => Promise<AppSnapshot>;
-  quitApp: () => Promise<void>;
-  onStateChanged: (listener: (snapshot: AppSnapshot) => void) => () => void;
+export type UpdateTodoInput = {
+  title: string;
+  reminderTime: string | null;
+  soundEnabled?: boolean;
+  /**
+   * 更新优先级。可选——不传或传 `null` 时 Rust 端走 `if let Some(priority)`
+   * 守卫，**保持原值**；传 priority 字符串则覆盖。语义与 `AddTodoInput::priority`
+   * 刻意不同：add 时 `None = 默认 medium`，update 时 `None = 保持原值`。
+   */
+  priority?: TodoPriority | null;
 };

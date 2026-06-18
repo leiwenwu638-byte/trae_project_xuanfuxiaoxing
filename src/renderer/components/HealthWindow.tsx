@@ -1,7 +1,13 @@
-import { Check, Pause, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Pause, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
 import { FormEvent, useState } from 'react';
+import {
+  createDefaultHealthReminderMessage,
+  getHealthReminderMessage,
+  MAX_HEALTH_REMINDER_MESSAGE_LENGTH
+} from '../../shared/reminderContent';
 import { calculateReminderProgress } from '../../shared/reminderService';
 import type { AddHealthReminderInput, HealthReminder, UpdateHealthReminderInput } from '../../shared/types';
+import { ActionButton } from './common/ActionButton';
 
 type HealthWindowProps = {
   reminders: HealthReminder[];
@@ -13,16 +19,39 @@ type HealthWindowProps = {
   onClose: () => void;
 };
 
+/**
+ * 健康节律窗口。
+ *
+ * 布局策略：
+ *   - 顶部 header 与 TodoPanel 风格一致：小标题（循环提醒）+ 主标题（健康提醒）
+ *     + 右侧只放 + 添加按钮（不再放 × 关闭，避免和 Windows 原生标题栏重复）；
+ *   - 每条提醒用"卡片式"两行布局：
+ *       1) 图标 / 名称 / 间隔 / 状态徽章
+ *       2) 进度条 + 剩余时间
+ *       3) 操作按钮行（编辑 / 暂停）
+ *     状态和操作分层，**不**再挤在 grid 五列里。
+ *   - `h-full w-full` 占满窗口（tauri.conf.json 380x600），
+ *     不再使用 `h-[520px] w-[380px]` 像素内框。
+ *   - 滚动区独立可滚：`flex flex-col overflow-hidden` 外层 + `flex-none` 头部 +
+ *     `min-h-0 flex-1 overflow-y-auto` 列表容器，10+ 条提醒不会撑出窗口。
+ *   - 单条删除入口（编辑 / 暂停 / 删除），删除走 `window.confirm` 二次确认，
+ *     防止误触，命中后走 `onDelete` → `desktopApi.reminder.deleteReminder` →
+ *     Tauri 端 `reminders.retain(...)` 落盘 `reminders.json`。
+ */
 export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDelete, onClose }: HealthWindowProps) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [intervalMinutes, setIntervalMinutes] = useState('30');
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [message, setMessage] = useState(createDefaultHealthReminderMessage(30));
+  const [messageEdited, setMessageEdited] = useState(false);
+  const [soundFilePath, setSoundFilePath] = useState('');
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editIntervalMinutes, setEditIntervalMinutes] = useState('30');
-  const [editSoundEnabled, setEditSoundEnabled] = useState(true);
+  const [editMessage, setEditMessage] = useState(createDefaultHealthReminderMessage(30));
+  const [editMessageEdited, setEditMessageEdited] = useState(false);
+  const [editSoundFilePath, setEditSoundFilePath] = useState('');
   const [editError, setEditError] = useState('');
 
   function submit(event: FormEvent) {
@@ -31,21 +60,42 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
     const interval = Number(intervalMinutes);
 
     if (!trimmedName) {
-      setError('提醒名称不能为空');
+      setError('提醒名称不能为空！');
       return;
     }
 
     if (!Number.isFinite(interval) || interval < 5 || interval > 480) {
-      setError('间隔需为 5 到 480 分钟');
+      setError('间隔需为 5 到 480 分钟！');
       return;
     }
 
-    onAdd({ name: trimmedName, intervalMinutes: interval, soundEnabled });
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) {
+      setError('提醒内容不能为空！');
+      return;
+    }
+
+    if ([...trimmedMessage].length > MAX_HEALTH_REMINDER_MESSAGE_LENGTH) {
+      setError(`提醒内容不能超过 ${MAX_HEALTH_REMINDER_MESSAGE_LENGTH} 字！`);
+      return;
+    }
+
+    onAdd({ name: trimmedName, intervalMinutes: interval, message: trimmedMessage, soundFilePath: soundFilePath || null });
     setName('');
     setIntervalMinutes('30');
-    setSoundEnabled(true);
+    setMessage(createDefaultHealthReminderMessage(30));
+    setMessageEdited(false);
+    setSoundFilePath('');
     setAdding(false);
     setError('');
+  }
+
+  function updateAddInterval(value: string) {
+    setIntervalMinutes(value);
+    setError('');
+    if (!messageEdited) {
+      setMessage(createDefaultHealthReminderMessage(intervalFromValue(value)));
+    }
   }
 
   function startEdit(reminder: HealthReminder) {
@@ -53,7 +103,9 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
     setEditingId(reminder.id);
     setEditName(reminder.name);
     setEditIntervalMinutes(String(reminder.intervalMinutes));
-    setEditSoundEnabled(reminder.soundEnabled);
+    setEditMessage(getHealthReminderMessage(reminder));
+    setEditMessageEdited(false);
+    setEditSoundFilePath(reminder.soundFilePath ?? '');
     setEditError('');
   }
 
@@ -65,28 +117,83 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
     const interval = Number(editIntervalMinutes);
 
     if (!trimmedName) {
-      setEditError('提醒名称不能为空');
+      setEditError('提醒名称不能为空！');
       return;
     }
 
     if (!Number.isFinite(interval) || interval < 5 || interval > 480) {
-      setEditError('间隔需要 5 到 480 分钟');
+      setEditError('间隔需要 5 到 480 分钟！');
       return;
     }
 
-    onUpdate(editingId, { name: trimmedName, intervalMinutes: interval, soundEnabled: editSoundEnabled });
+    const trimmedMessage = editMessage.trim();
+    if (!trimmedMessage) {
+      setEditError('提醒内容不能为空！');
+      return;
+    }
+
+    if ([...trimmedMessage].length > MAX_HEALTH_REMINDER_MESSAGE_LENGTH) {
+      setEditError(`提醒内容不能超过 ${MAX_HEALTH_REMINDER_MESSAGE_LENGTH} 字！`);
+      return;
+    }
+
+    onUpdate(editingId, {
+      name: trimmedName,
+      intervalMinutes: interval,
+      message: trimmedMessage,
+      soundFilePath: editSoundFilePath || null
+    });
     setEditingId(null);
     setEditError('');
   }
 
+  function updateEditInterval(value: string) {
+    setEditIntervalMinutes(value);
+    setEditError('');
+    if (!editMessageEdited) {
+      setEditMessage(createDefaultHealthReminderMessage(intervalFromValue(value)));
+    }
+  }
+
+  /**
+   * 删除一条提醒（带确认）。
+   *
+   * 轻量确认策略：用 `window.confirm`，文案"确定删除该健康提醒吗？"。
+   *   - 确认 → 调 `onDelete(reminder.id)`，后端删 → 广播 snapshot →
+   *     `App` 收到后整页重新渲染，该提醒从列表消失。
+   *   - 取消 → 什么都不做（无副作用）。
+   *   - 失败 → `App` 那边 `setSnapshotSafe(...).catch(console.error)` 把
+   *     错误打到 console，不静默。
+   *
+   * **不**复用 `ReminderPopup`（提示用户"任务开始"的浮窗，语义不对）；
+   * **不**引入弹窗库（轻量、避免依赖膨胀）。
+   */
+  function confirmDelete(reminder: HealthReminder) {
+    // 关闭编辑态，避免删除后还停留在一个不存在的 id 上。
+    if (editingId === reminder.id) {
+      setEditingId(null);
+    }
+    const ok = window.confirm(`确定删除该健康提醒吗？\n\n名称：${reminder.name}`);
+    if (!ok) return;
+    try {
+      onDelete(reminder.id);
+    } catch (error) {
+      // 同步抛错（mock adapter 在 dev 模式偶发）时不要让 React 整页崩。
+      console.warn('[HealthWindow] delete reminder failed:', error);
+    }
+  }
+
   return (
-    <section className="flex h-[520px] w-[380px] flex-col overflow-hidden rounded-lg border border-assistant-line bg-white text-[13px] text-assistant-ink shadow-utility">
-      <header className="drag-region flex flex-none items-center justify-between border-b border-assistant-line px-4 py-3">
-        <div>
+    <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
+      <header className="drag-region flex flex-none items-center justify-between gap-3 border-b border-assistant-line px-4 py-3">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] text-assistant-muted">循环提醒</p>
-          <h1 className="text-[15px] font-semibold">健康提醒</h1>
+          <h1 className="truncate text-[15px] font-semibold leading-snug">健康提醒</h1>
+          <p className="mt-0.5 truncate text-[11px] text-assistant-muted">
+            {reminders.length > 0 ? `${reminders.length} 条循环提醒` : '尚未添加提醒'}
+          </p>
         </div>
-        <div className="no-drag flex items-center gap-1">
+        <div className="no-drag flex flex-none items-center">
           <button
             aria-label="添加提醒"
             className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-accent hover:text-assistant-accent"
@@ -95,195 +202,296 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
           >
             <Plus size={14} />
           </button>
-          <button
-            aria-label="关闭提醒管理"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-warning hover:text-assistant-warning"
-            type="button"
-            onClick={onClose}
-          >
-            <X size={14} />
-          </button>
         </div>
       </header>
 
-      {adding ? (
-        <form className="flex-none space-y-2 border-b border-assistant-line bg-assistant-wash/60 px-4 py-3" onSubmit={submit}>
-          <label className="block text-[11px] text-assistant-muted">
-            提醒名称
-            <input
-              aria-label="提醒名称"
-              className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-              maxLength={20}
-              value={name}
-              onChange={(event) => {
-                setName(event.target.value);
-                setError('');
-              }}
-            />
-          </label>
-          <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {adding ? (
+          <form
+            className="space-y-2 border-b border-assistant-line bg-assistant-wash/60 px-4 py-3"
+            noValidate
+            onSubmit={submit}
+          >
             <label className="block text-[11px] text-assistant-muted">
-              间隔分钟
+              提醒名称
               <input
-                aria-label="间隔分钟"
+                aria-label="提醒名称"
                 className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-                max={480}
-                min={5}
-                type="number"
-                value={intervalMinutes}
+                maxLength={20}
+                value={name}
                 onChange={(event) => {
-                  setIntervalMinutes(event.target.value);
+                  setName(event.target.value);
                   setError('');
                 }}
               />
             </label>
-            <label className="flex h-8 items-center gap-1 text-[11px] text-assistant-muted">
-              <input
-                checked={soundEnabled}
-                type="checkbox"
-                onChange={(event) => setSoundEnabled(event.target.checked)}
+            <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+              <label className="block text-[11px] text-assistant-muted">
+                间隔分钟
+                <input
+                  aria-label="间隔分钟"
+                  className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
+                  max={480}
+                  min={5}
+                  type="number"
+                  value={intervalMinutes}
+                  onChange={(event) => updateAddInterval(event.target.value)}
+                />
+              </label>
+              <label className="block text-[11px] text-assistant-muted">
+                提示音附件
+                <input
+                  accept="audio/*"
+                  aria-label="提示音附件"
+                  className="mt-1 w-32 text-[11px] text-assistant-muted file:mr-2 file:rounded-md file:border-0 file:bg-assistant-accent file:px-2 file:py-1 file:text-[11px] file:text-white"
+                  type="file"
+                  onChange={(event) => setSoundFilePath(selectedFilePath(event.currentTarget))}
+                />
+              </label>
+            </div>
+            {soundFilePath ? <p className="truncate text-[11px] text-assistant-muted">已选择：{fileNameFromPath(soundFilePath)}</p> : null}
+            <label className="block text-[11px] text-assistant-muted">
+              提醒内容
+              <textarea
+                aria-label="提醒内容"
+                className="mt-1 h-14 w-full resize-none rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] leading-5 text-assistant-ink"
+                maxLength={MAX_HEALTH_REMINDER_MESSAGE_LENGTH}
+                value={message}
+                onChange={(event) => {
+                  setMessage(event.target.value);
+                  setMessageEdited(true);
+                  setError('');
+                }}
               />
-              提示音
             </label>
-          </div>
-          {error ? <p className="text-[11px] text-assistant-warning">{error}</p> : null}
-          <div className="flex justify-end gap-1">
-            <button
-              aria-label="取消添加提醒"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-assistant-muted hover:bg-white"
-              type="button"
-              onClick={() => setAdding(false)}
-            >
-              <X size={14} />
-            </button>
-            <button
-              aria-label="保存提醒"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-assistant-accent text-white"
-              type="submit"
-            >
-              <Check size={14} />
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      <div className="flex-1 divide-y divide-assistant-line overflow-y-auto">
-        {reminders.map((reminder) => {
-          const progress = calculateReminderProgress(reminder, now);
-          const isEditing = editingId === reminder.id;
-          return (
-            <article key={reminder.id} className="px-4 py-3">
-              <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2">
-                <div className="min-w-0">
-                  <h2 className="truncate font-medium">
-                    <span className="mr-2">{reminder.icon}</span>
-                    {reminder.name}
-                  </h2>
-                  <p className="text-[11px] text-assistant-muted">每 {reminder.intervalMinutes} 分钟</p>
-                </div>
-                <span className={reminder.enabled ? 'text-[11px] text-assistant-success' : 'text-[11px] text-assistant-muted'}>
-                  {reminder.enabled ? '运行' : '暂停'}
-                </span>
-                <button
-                  aria-label={`编辑：${reminder.name}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-accent hover:text-assistant-accent"
-                  type="button"
-                  onClick={() => startEdit(reminder)}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  aria-label={`${reminder.enabled ? '暂停' : '运行'}：${reminder.name}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-accent hover:text-assistant-accent"
-                  type="button"
-                  onClick={() => onToggle(reminder.id)}
-                >
-                  {reminder.enabled ? <Pause size={14} /> : <Play size={14} />}
-                </button>
-                <button
-                  aria-label={`删除：${reminder.name}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-warning hover:text-assistant-warning"
-                  type="button"
-                  onClick={() => onDelete(reminder.id)}
-                >
-                  <Trash2 size={14} />
-                </button>
+            {error ? <InlineAlert>{error}</InlineAlert> : null}
+            <div className="flex justify-end gap-2.5">
+              <ActionButton
+                variant="ghost"
+                size="icon"
+                icon={<X size={14} />}
+                ariaLabel="取消添加提醒"
+                onClick={() => setAdding(false)}
+              />
+              <ActionButton
+                variant="primary"
+                size="icon"
+                icon={<Check size={14} />}
+                ariaLabel="保存提醒"
+                type="submit"
+              />
+            </div>
+          </form>
+        ) : null}
+        <div className="space-y-2 p-3">
+          {reminders.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+              <div className="text-[28px]" aria-hidden>
+                ⏰
               </div>
-              {isEditing ? (
-                <form className="mt-3 space-y-2 rounded-md border border-dashed border-assistant-line bg-assistant-wash/60 p-2" onSubmit={submitEdit}>
-                  <label className="block text-[11px] text-assistant-muted">
-                    修改提醒名称
-                    <input
-                      aria-label="修改提醒名称"
-                      className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-                      maxLength={20}
-                      value={editName}
-                      onChange={(event) => {
-                        setEditName(event.target.value);
-                        setEditError('');
-                      }}
-                    />
-                  </label>
-                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+              <p className="text-[13px] font-medium text-assistant-ink">尚未添加循环提醒</p>
+              <p className="max-w-[260px] text-[12px] text-assistant-muted">
+                点击右上角 + 添加第一条健康提醒
+              </p>
+            </div>
+          ) : (
+            reminders.map((reminder) => {
+            const progress = calculateReminderProgress(reminder, now);
+            const isEditing = editingId === reminder.id;
+            return (
+              <article
+                key={reminder.id}
+                className="rounded-md border border-assistant-line bg-white p-3 transition hover:border-assistant-accent/40"
+              >
+                {/* 第一行：图标 / 名称 / 间隔 / 状态徽章 */}
+                <div className="flex items-center gap-2">
+                  <div className="text-[18px] leading-none" aria-hidden>
+                    {reminder.icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-[13px] font-medium">{reminder.name}</h2>
+                    <p className="text-[11px] text-assistant-muted">每 {reminder.intervalMinutes} 分钟</p>
+                  </div>
+                  <span
+                    className={
+                      reminder.enabled
+                        ? 'rounded-full bg-assistant-success/10 px-2 py-0.5 text-[11px] text-assistant-success'
+                        : 'rounded-full bg-assistant-wash px-2 py-0.5 text-[11px] text-assistant-muted'
+                    }
+                  >
+                    {reminder.enabled ? '运行' : '已暂停'}
+                  </span>
+                </div>
+
+                {/* 第二行：进度条 + 剩余时间 */}
+                {!isEditing ? (
+                  <div className="mt-2 flex items-center gap-3">
+                    <div
+                      className="h-2 flex-1 overflow-hidden rounded-full bg-assistant-wash"
+                      role="progressbar"
+                      aria-valuenow={Math.round(progress.progress * 100)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="h-full rounded-full bg-assistant-accent transition-[width]"
+                        style={{ width: `${Math.round(progress.progress * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-assistant-muted" data-testid="remaining-time">
+                      剩余 {progress.remainingMinutes} 分钟
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* 第三行：编辑 / 暂停 / 删除（接入 ActionButton 统一样式） */}
+                {!isEditing ? (
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <ActionButton
+                      variant="muted"
+                      size="sm"
+                      icon={<Pencil size={11} />}
+                      ariaLabel={`编辑：${reminder.name}`}
+                      onClick={() => startEdit(reminder)}
+                    >
+                      编辑
+                    </ActionButton>
+                    <ActionButton
+                      variant="muted"
+                      size="sm"
+                      icon={reminder.enabled ? <Pause size={11} /> : <Play size={11} />}
+                      ariaLabel={`${reminder.enabled ? '暂停' : '运行'}：${reminder.name}`}
+                      onClick={() => onToggle(reminder.id)}
+                    >
+                      {reminder.enabled ? '暂停' : '运行'}
+                    </ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      size="sm"
+                      icon={<Trash2 size={11} />}
+                      ariaLabel={`删除：${reminder.name}`}
+                      data-testid={`delete-reminder-${reminder.id}`}
+                      onClick={() => confirmDelete(reminder)}
+                    >
+                      删除
+                    </ActionButton>
+                  </div>
+                ) : null}
+
+                {isEditing ? (
+                  <form
+                    className="mt-3 space-y-2 rounded-md border border-dashed border-assistant-line bg-assistant-wash/60 p-2"
+                    noValidate
+                    onSubmit={submitEdit}
+                  >
                     <label className="block text-[11px] text-assistant-muted">
-                      修改间隔分钟
+                      修改提醒名称
                       <input
-                        aria-label="修改间隔分钟"
+                        aria-label="修改提醒名称"
                         className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-                        max={480}
-                        min={5}
-                        type="number"
-                        value={editIntervalMinutes}
+                        maxLength={20}
+                        value={editName}
                         onChange={(event) => {
-                          setEditIntervalMinutes(event.target.value);
+                          setEditName(event.target.value);
                           setEditError('');
                         }}
                       />
                     </label>
-                    <label className="flex h-8 items-center gap-1 text-[11px] text-assistant-muted">
-                      <input
-                        aria-label="修改提示音"
-                        checked={editSoundEnabled}
-                        type="checkbox"
-                        onChange={(event) => setEditSoundEnabled(event.target.checked)}
+                    <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                      <label className="block text-[11px] text-assistant-muted">
+                        修改间隔分钟
+                        <input
+                          aria-label="修改间隔分钟"
+                          className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
+                          max={480}
+                          min={5}
+                          type="number"
+                          value={editIntervalMinutes}
+                          onChange={(event) => updateEditInterval(event.target.value)}
+                        />
+                      </label>
+                      <label className="block text-[11px] text-assistant-muted">
+                        修改提示音附件
+                        <input
+                          accept="audio/*"
+                          aria-label="修改提示音附件"
+                          className="mt-1 w-32 text-[11px] text-assistant-muted file:mr-2 file:rounded-md file:border-0 file:bg-assistant-accent file:px-2 file:py-1 file:text-[11px] file:text-white"
+                          type="file"
+                          onChange={(event) => setEditSoundFilePath(selectedFilePath(event.currentTarget))}
+                        />
+                      </label>
+                    </div>
+                    {editSoundFilePath ? (
+                      <p className="truncate text-[11px] text-assistant-muted">已选择：{fileNameFromPath(editSoundFilePath)}</p>
+                    ) : null}
+                    <label className="block text-[11px] text-assistant-muted">
+                      修改提醒内容
+                      <textarea
+                        aria-label="修改提醒内容"
+                        className="mt-1 h-14 w-full resize-none rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] leading-5 text-assistant-ink"
+                        maxLength={MAX_HEALTH_REMINDER_MESSAGE_LENGTH}
+                        value={editMessage}
+                        onChange={(event) => {
+                          setEditMessage(event.target.value);
+                          setEditMessageEdited(true);
+                          setEditError('');
+                        }}
                       />
-                      提示音
                     </label>
-                  </div>
-                  {editError ? <p className="text-[11px] text-assistant-warning">{editError}</p> : null}
-                  <div className="flex justify-end gap-1">
-                    <button
-                      aria-label="取消修改"
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-assistant-muted hover:bg-white"
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                    >
-                      <X size={14} />
-                    </button>
-                    <button
-                      aria-label="保存修改"
-                      className="flex h-7 w-7 items-center justify-center rounded-md bg-assistant-accent text-white"
-                      type="submit"
-                    >
-                      <Check size={14} />
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="mt-3 grid grid-cols-[1fr_78px] items-center gap-3">
-                  <div className="h-2 overflow-hidden rounded-full bg-assistant-wash">
-                    <div
-                      className="h-full rounded-full bg-assistant-accent transition-[width]"
-                      style={{ width: `${Math.round(progress.progress * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-right text-[11px] text-assistant-muted">剩余 {progress.remainingMinutes} 分钟</p>
-                </div>
-              )}
-            </article>
-          );
-        })}
+                    {editError ? <InlineAlert>{editError}</InlineAlert> : null}
+                    <div className="flex justify-end gap-2.5">
+                      <button
+                        aria-label="取消修改"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-assistant-muted hover:bg-white"
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                      >
+                        <X size={14} />
+                      </button>
+                      <button
+                        aria-label="保存修改"
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-assistant-accent text-white"
+                        type="submit"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </article>
+            );
+          })
+        )}
+        </div>
       </div>
     </section>
+  );
+}
+
+function intervalFromValue(value: string): number {
+  const interval = Number(value);
+  return Number.isFinite(interval) && interval > 0 ? interval : 30;
+}
+
+function selectedFilePath(input: HTMLInputElement): string {
+  const file = input.files?.[0] as (File & { path?: string }) | undefined;
+  return file?.path ?? input.value;
+}
+
+function fileNameFromPath(filePath: string): string {
+  return filePath.split(/[\\/]/).pop() ?? filePath;
+}
+
+function InlineAlert({ children }: { children: string }) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-2.5 py-2 text-[12px] leading-5 text-orange-800"
+      role="alert"
+    >
+      <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-assistant-warning text-white">
+        <AlertTriangle size={12} />
+      </span>
+      <span>{children}</span>
+    </div>
   );
 }

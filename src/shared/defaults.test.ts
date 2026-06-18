@@ -8,6 +8,11 @@ describe('defaults', () => {
     expect(reminders).toHaveLength(3);
     expect(reminders.map((reminder) => reminder.name)).toEqual(['久坐站起', '定时喝水', '护眼休息']);
     expect(reminders.map((reminder) => reminder.intervalMinutes)).toEqual([45, 30, 60]);
+    expect(reminders.map((reminder) => reminder.message)).toEqual([
+      '已过 45 分钟，该活动一下了！',
+      '已过 30 分钟，该活动一下了！',
+      '已过 60 分钟，该活动一下了！'
+    ]);
     expect(reminders.every((reminder) => reminder.enabled)).toBe(true);
     expect(reminders.every((reminder) => reminder.nextTriggerAt)).toBe(true);
   });

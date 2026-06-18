@@ -25,21 +25,23 @@ describe('todoService', () => {
     expect(store[today][0]).toMatchObject({
       title: '完成作业',
       reminderTime: '10:00',
+      soundEnabled: true,
       completed: false,
+      priority: 'medium',
       advanceRemindedAt: null,
       remindedAt: null
     });
   });
 
   it('rejects empty and overly long titles', () => {
-    expect(() => addTodo({}, today, { title: '   ', reminderTime: null })).toThrow('任务名称不能为空');
+    expect(() => addTodo({}, today, { title: '   ', reminderTime: null, soundEnabled: true })).toThrow('任务名称不能为空');
     expect(() =>
-      addTodo({}, today, { title: '一'.repeat(41), reminderTime: null })
+      addTodo({}, today, { title: '一'.repeat(41), reminderTime: null, soundEnabled: true })
     ).toThrow('任务名称不能超过 40 字');
   });
 
   it('toggles completion without deleting the todo', () => {
-    const store = addTodo({}, today, { title: '开组会', reminderTime: null });
+    const store = addTodo({}, today, { title: '开组会', reminderTime: null, soundEnabled: true });
     const id = store[today][0].id;
 
     const next = toggleTodo(store, today, id);
@@ -55,7 +57,9 @@ describe('todoService', () => {
           id: 'todo-1',
           title: '吃饭',
           reminderTime: '17:00',
+          soundEnabled: false,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: '2026-06-10T16:50:00.000Z',
           remindedAt: '2026-06-10T17:00:00.000Z',
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -63,25 +67,26 @@ describe('todoService', () => {
       ]
     };
 
-    const next = updateTodo(store, today, 'todo-1', { title: '五点半吃饭', reminderTime: '17:30' });
+    const next = updateTodo(store, today, 'todo-1', { title: '五点半吃饭', reminderTime: '17:30', soundEnabled: true });
 
     expect(next[today][0]).toMatchObject({
       title: '五点半吃饭',
       reminderTime: '17:30',
+      soundEnabled: true,
       advanceRemindedAt: null,
       remindedAt: null
     });
   });
 
   it('rejects invalid todo updates', () => {
-    const store = addTodo({}, today, { title: '开组会', reminderTime: null });
+    const store = addTodo({}, today, { title: '开组会', reminderTime: null, soundEnabled: true });
     const id = store[today][0].id;
 
-    expect(() => updateTodo(store, today, id, { title: '   ', reminderTime: null })).toThrow('任务名称不能为空');
+    expect(() => updateTodo(store, today, id, { title: '   ', reminderTime: null, soundEnabled: true })).toThrow('任务名称不能为空');
   });
 
   it('deletes a todo', () => {
-    const store = addTodo({}, today, { title: '开组会', reminderTime: null });
+    const store = addTodo({}, today, { title: '开组会', reminderTime: null, soundEnabled: true });
     const id = store[today][0].id;
 
     expect(deleteTodo(store, today, id)[today]).toEqual([]);
@@ -94,7 +99,9 @@ describe('todoService', () => {
           id: 'todo-1',
           title: '喝水',
           reminderTime: '10:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: '2026-06-10T09:50:00.000Z',
           remindedAt: '2026-06-10T10:00:00.000Z',
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -102,7 +109,7 @@ describe('todoService', () => {
       ]
     };
 
-    const next = snoozeTodo(store, today, 'todo-1', 10, new Date(2026, 5, 10, 10, 5, 0));
+    const next = snoozeTodo(store, today, 'todo-1', 10, new Date(2020, 5, 10, 10, 5, 0));
 
     expect(next[today][0].reminderTime).toBe('10:15');
     expect(next[today][0].advanceRemindedAt).toBeNull();
@@ -116,7 +123,9 @@ describe('todoService', () => {
           id: 'todo-1',
           title: '完成作业',
           reminderTime: '10:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: null,
           remindedAt: null,
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -125,7 +134,9 @@ describe('todoService', () => {
           id: 'todo-2',
           title: '已提醒',
           reminderTime: '09:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: null,
           remindedAt: '2026-06-10T09:00:00.000Z',
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -145,7 +156,9 @@ describe('todoService', () => {
           id: 'todo-1',
           title: '吃饭',
           reminderTime: '17:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: null,
           remindedAt: null,
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -154,7 +167,9 @@ describe('todoService', () => {
           id: 'todo-2',
           title: '已提前提醒',
           reminderTime: '17:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: '2026-06-10T16:50:00.000Z',
           remindedAt: null,
           createdAt: '2026-06-10T08:00:00.000Z'
@@ -174,7 +189,9 @@ describe('todoService', () => {
           id: 'todo-1',
           title: '吃饭',
           reminderTime: '17:00',
+          soundEnabled: true,
           completed: false,
+          priority: 'medium',
           advanceRemindedAt: null,
           remindedAt: null,
           createdAt: '2026-06-10T08:00:00.000Z'

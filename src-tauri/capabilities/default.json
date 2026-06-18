@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for Tauri windows. 第四阶段：允许自定义 storage / todo / reminder / settings command 调用，以及 core:event 频道用于 state-changed 推送。第五阶段：扩展 windows 字段，让 todo / health / reminder-popup 三个新 webview 也能调用 Tauri 核心 API（invoke 自定义 command、监听 state-changed 事件等）。",
+  "windows": ["main", "todo", "health", "reminder-popup"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

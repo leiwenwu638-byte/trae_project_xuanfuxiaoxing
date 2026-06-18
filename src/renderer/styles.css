@@ -21,20 +21,36 @@
 html,
 body,
 #root {
-  min-width: 100%;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   background: transparent;
   overflow: hidden;
 }
 
+/* 提醒弹窗专用样式：Tauri reminder-popup 是 transparent + decorations:false 窗口，
+   WebView2 仍会绘制默认白底。这里把 body 之外的容器、padding 全部归零，
+   让 `body` 自身透明、`#root` 占满、`popup-root` 自身直接是白色卡片
+   （见 `ReminderPopup.tsx` 注释），不留任何可见的"外层透明/半透明边框"。 */
+body:has(.popup-root) {
+  background: transparent;
+}
+
+#root:has(.popup-root) {
+  background: transparent;
+  padding: 0;
+}
+
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible {
   outline: 2px solid #6c63ff;
   outline-offset: 2px;
 }
@@ -45,7 +61,8 @@ input:focus-visible {
 
 .no-drag,
 button,
-input {
+input,
+textarea {
   -webkit-app-region: no-drag;
 }
 
@@ -63,6 +80,112 @@ input {
 
 .todo-time-pop {
   animation: todo-time-pop 260ms ease-out both;
+}
+
+.todo-time-input::selection {
+  background: rgba(108, 99, 255, 0.16);
+  color: #333333;
+}
+
+.todo-time-input::-webkit-calendar-picker-indicator,
+.todo-time-input::-webkit-clear-button {
+  display: none;
+}
+
+/* WebView2 (Edge Chromium) 默认会给 input 在 :focus 时绘制浏览器原生蓝色 outline，
+   以及给 type=time 的 calendar picker indicator 一个蓝色高亮。这里全部显式覆盖：
+     - focus 状态不再有 outline / ring / box-shadow；
+     - 左侧的时钟图标保留（Clock SVG），右侧 webkit picker indicator 显示为浅灰、
+       点击区域保留，避免用户感知不到这是时间控件。
+   外层 .todo-time-field 已经通过 focus-within 给紫色轻提示，不会出现"明显蓝色描边"。 */
+.todo-time-input:focus,
+.todo-time-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+input[type='time']:focus,
+input[type='time']:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+input[type='time']::-webkit-calendar-picker-indicator {
+  opacity: 0.4;
+  cursor: pointer;
+  filter: grayscale(0.6);
+  transition: opacity 120ms ease;
+}
+
+input[type='time']:hover::-webkit-calendar-picker-indicator {
+  opacity: 0.7;
+}
+
+input[type='time']::-webkit-datetime-edit-ampm-field,
+input[type='time']::-webkit-datetime-edit-hour-field,
+input[type='time']::-webkit-datetime-edit-minute-field,
+input[type='time']::-webkit-datetime-edit-text {
+  color: var(--assistant-ink);
+  padding: 0 1px;
+}
+
+/* TimeWheelPicker 样式。
+   - `.time-wheel-item` 固定高度 36px（与组件内的 ITEM_HEIGHT 保持一致），
+     避免依赖 Tailwind 的任意值类，便于以后调整。
+   - `.time-wheel-viewport` 隐藏 webkit 滚动条 / firefox 滚动条，
+     因为滚轮交互不是真实滚动条，而是 `transform: translateY` 居中。 */
+.time-wheel-item {
+  height: 36px;
+}
+
+.time-wheel-viewport {
+  scrollbar-width: none;
+}
+
+.time-wheel-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.time-wheel-popover {
+  /* 浮层 fade-in：从下方 4px 滑入，120ms 短促。 */
+  animation: time-wheel-pop-in 140ms ease-out both;
+}
+
+@keyframes time-wheel-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 让 Tauri WebView2（默认隐藏滚动条）里的内容滚动更明显。
+   - 窄滚动条（6px），低饱和颜色 hover/active 反馈，避免破坏 380px 窗口视觉；
+   - 仅作用于设置了 `overflow-y-auto` 的滚动容器（健康提醒列表 / 今日待办列表）。 */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(108, 99, 255, 0.18);
+  border-radius: 999px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgba(108, 99, 255, 0.32);
+}
+
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 99, 255, 0.32) transparent;
 }
 
 @keyframes reminder-popup-drop {
