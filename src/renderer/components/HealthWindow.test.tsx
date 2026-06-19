@@ -208,16 +208,15 @@ describe('HealthWindow', () => {
     fireEvent.change(screen.getByLabelText('提醒名称'), { target: { value: '拉伸' } });
     fireEvent.change(screen.getByLabelText('间隔分钟'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('提醒内容'), { target: { value: '站起来拉伸肩颈！' } });
-    fireEvent.change(screen.getByLabelText('提示音附件'), {
-      target: { files: [fileWithPath('ice.wav', 'D:\\Sounds\\ice.wav')] }
-    });
     fireEvent.click(screen.getByRole('button', { name: '保存提醒' }));
 
+    // 提示音附件能力已暂时下线（详见 HealthWindow.tsx 注释），
+    // 前端永远传 `soundFilePath: null`，后端会 fallback 到默认音。
     expect(onAdd).toHaveBeenCalledWith({
       name: '拉伸',
       intervalMinutes: 20,
       message: '站起来拉伸肩颈！',
-      soundFilePath: 'D:\\Sounds\\ice.wav'
+      soundFilePath: null
     });
   });
 
@@ -279,16 +278,14 @@ describe('HealthWindow', () => {
     fireEvent.change(screen.getByLabelText('修改提醒名称'), { target: { value: 'Walk around' } });
     fireEvent.change(screen.getByLabelText('修改间隔分钟'), { target: { value: '45' } });
     fireEvent.change(screen.getByLabelText('修改提醒内容'), { target: { value: '离开座位走一走！' } });
-    fireEvent.change(screen.getByLabelText('修改提示音附件'), {
-      target: { files: [fileWithPath('walk.wav', 'D:\\Sounds\\walk.wav')] }
-    });
     fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
 
+    // 提示音附件能力已下线 → 前端永远传 null，详见 HealthWindow.tsx 注释。
     expect(onUpdate).toHaveBeenCalledWith('custom', {
       name: 'Walk around',
       intervalMinutes: 45,
       message: '离开座位走一走！',
-      soundFilePath: 'D:\\Sounds\\walk.wav'
+      soundFilePath: null
     });
   });
 
@@ -312,9 +309,3 @@ describe('HealthWindow', () => {
     expect(labels[2]).toBe('删除：定时喝水');
   });
 });
-
-function fileWithPath(name: string, path: string): File {
-  const file = new File(['audio'], name, { type: 'audio/wav' });
-  Object.defineProperty(file, 'path', { value: path });
-  return file;
-}

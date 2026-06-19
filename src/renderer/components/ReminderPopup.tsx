@@ -1,3 +1,32 @@
+// 默认提示音路径。音频文件实际放在 `public/sound-default.wav`：
+//   - Vite / Tauri 都会把 `public/` 里的文件原样发布到站点根，开发期
+//     `npm run dev:vite` 直接 serve，生产期 `vite build` 拷到 `dist/`。
+//   - Tauri 把 `dist/` 全部作为 webview 资源，路径 `/sound-default.wav`
+//     永远可解析；不需要 `import` 资源（避免 vitest 无法解析 asset 路径）。
+// 旧版本曾经 `import defaultSoundUrl from '../../assets/...wav'`，vitest
+// 跑测时 jsdom 环境里没有 build pipeline → "Failed to resolve"。
+// 改用 public/ 资源后，开发 / 生产 / 单测三套环境都走同一段字符串拼接代码。
+const DEFAULT_SOUND_URL = '/sound-default.wav';
+
+/**
+ * 解析 `soundSrc`，把业务占位值映射到真实可播放的音频 URL。
+ *
+ * 输入约定（来自 `scheduler.rs` / `tray.rs` / 前端 `desktopApi`）：
+ *   - `null` / `undefined` / `""` → 不播放（用户未开启 / 测试弹窗）；
+ *   - `"default"` → 后端 `build_new_todo` 在 `sound_enabled` 时传入的字面量，
+ *     映射到 `/sound-default.wav`（public/ 默认音）；
+ *   - 其它 → 视为真实 URL（开发者手动传入的资源，未来 Tauri dialog 拿到的真实路径等）。
+ *
+ * 关键：旧实现直接把 `soundSrc` 喂给 `<audio src=...>`。当值为 `"default"` 时，
+ * 前端会去请求 `/default` 这个资源 → 404 静默失败 → 用户感受是"提醒弹窗没声音"。
+ * 这里是 P0 bug，详见 README 中的"已知问题 / 修复记录"。
+ */
+function resolveSoundSrc(soundSrc: string | null | undefined): string | null {
+  if (!soundSrc) return null;
+  if (soundSrc === 'default') return DEFAULT_SOUND_URL;
+  return soundSrc;
+}
+
 type ReminderPopupProps = {
   icon: string;
   title: string;
@@ -32,13 +61,15 @@ export function ReminderPopup({ icon, title, body, soundSrc, onClose }: Reminder
     }
   }
 
+  const resolvedSound = resolveSoundSrc(soundSrc);
+
   return (
     <section
       role="alertdialog"
       aria-label={title || '提醒'}
       className="popup-root reminder-popup-enter flex h-full w-full gap-3 overflow-hidden rounded-lg bg-white p-3 text-[13px] text-assistant-ink shadow-utility"
     >
-      {soundSrc ? <audio autoPlay src={soundSrc} /> : null}
+      {resolvedSound ? <audio autoPlay src={resolvedSound} /> : null}
       <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-assistant-wash text-[20px]">
         {icon}
       </div>

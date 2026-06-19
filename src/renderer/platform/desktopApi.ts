@@ -138,7 +138,8 @@ async function tauriListen<T>(
 /**
  * 应用**必需**的 Tauri command 集合（"必需" = 业务依赖、不能静默失败的命令）。
  *
- * 名字从历史的 `CORE_TAURI_COMMANDS` 改为 `REQUIRED_TAURI_COMMANDS`：
+ * 名字从历史的 `CORE_TAURI_COMMANDS` → `REQUIRED_TAURI_COMMANDS` →
+ * `REQUIRED_TAURI_COMMANDS_FOR_TEST`：
  *   - "core" 太泛，混了数据 / 窗口 / 调度 3 类，无法表达"业务必需"语义；
  *   - "required" 直接对应"如果这个命令失败，应用不能继续运行"。
  *
@@ -151,7 +152,7 @@ async function tauriListen<T>(
  * 和 `safeInvoke` 之间的判断变得分散。本阶段保持现状，下一阶段如
  * 出现"某类命令静默 / 某类命令报错"的差异化需求，再切到多集合。
  */
-const REQUIRED_TAURI_COMMANDS = new Set<string>([
+export const REQUIRED_TAURI_COMMANDS_FOR_TEST = new Set<string>([
   'get_snapshot',
   'list_todos',
   'add_todo',
@@ -345,5 +346,9 @@ const adapter = detectPlatform() === 'tauri' ? createTauriAdapter() : createMock
 export const desktopApi: DesktopApi = adapter;
 
 export const __testing__ = {
-  REQUIRED_TAURI_COMMANDS
+  /**
+   * 测试可见的命令清单。详见 `desktopApi.test.ts` 中对 `REQUIRED_TAURI_COMMANDS_FOR_TEST`
+   * 集合成员的断言。
+   */
+  REQUIRED_TAURI_COMMANDS_FOR_TEST
 };

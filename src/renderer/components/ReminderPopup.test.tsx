@@ -30,4 +30,26 @@ describe('ReminderPopup', () => {
     expect(audio).toHaveAttribute('src', 'file:///D:/Sounds/ice.wav');
     expect(audio).toHaveAttribute('autoplay');
   });
+
+  it('maps the "default" sound source to the public default audio asset', () => {
+    const { container } = render(
+      <ReminderPopup body="活动一下" icon="💧" soundSrc="default" title="定时喝水" onClose={vi.fn()} />
+    );
+
+    const audio = container.querySelector('audio');
+    expect(audio).toHaveAttribute('src', '/sound-default.wav');
+    expect(audio).toHaveAttribute('autoplay');
+  });
+
+  it('does not render an audio element when the sound source is empty or null', () => {
+    const { container: c1 } = render(
+      <ReminderPopup body="活动一下" icon="💧" soundSrc="" title="定时喝水" onClose={vi.fn()} />
+    );
+    expect(c1.querySelector('audio')).toBeNull();
+
+    const { container: c2 } = render(
+      <ReminderPopup body="活动一下" icon="💧" soundSrc={null} title="定时喝水" onClose={vi.fn()} />
+    );
+    expect(c2.querySelector('audio')).toBeNull();
+  });
 });

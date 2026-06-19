@@ -51,6 +51,10 @@ const VIEWPORT_HEIGHT = 5 * ITEM_HEIGHT; // 5 个 item 可见（中间 + 上下�
  */
 const DEFAULT_HOUR = '09';
 const DEFAULT_MINUTE = '00';
+/** 浮层最小宽度，避免小时 + 分钟两列滚轮在窄 input 中挤变形。 */
+const POPOVER_MIN_WIDTH = 240;
+/** 浮层距视口边的最小内边距。 */
+const VIEWPORT_MARGIN = 8;
 
 function parseHour(value: string | null): string {
   if (!value) return DEFAULT_HOUR;
@@ -85,7 +89,7 @@ export function TimeWheelPicker({
   const [open, setOpen] = useState(false);
   const [hour, setHour] = useState<string>(() => parseHour(value));
   const [minute, setMinute] = useState<string>(() => parseMinute(value));
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number }>({
     top: 0,
@@ -99,14 +103,48 @@ export function TimeWheelPicker({
     setMinute(parseMinute(value));
   }, [value]);
 
-  // 打开时按 trigger 的位置计算浮层 fixed 坐标
+  // 打开时按 trigger 的位置计算浮层 fixed 坐标，并做基础视口边界修正：
+  //   - 右侧不能超出 `window.innerWidth - VIEWPORT_MARGIN`；
+  //   - 底部空间不足时优先向上展开（让 top = trigger.top - popoverHeight - 6），
+  //     仍不足时回退到 viewport bottom - margin，至少让浮层主体可见；
+  //   - 顶部边界：向上展开时不能小于 VIEWPORT_MARGIN。
+  // 不引入定位库（无 popper / float-ui 等），仅做最小化修正。
   useLayoutEffect(() => {
     if (!open) return;
     function reposition() {
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      setPos({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 240) });
+      const popoverWidth = Math.max(rect.width, POPOVER_MIN_WIDTH);
+
+      // 横向：让 left 落在 [MARGIN, innerWidth - popoverWidth - MARGIN]
+      const maxLeft = Math.max(
+        VIEWPORT_MARGIN,
+        window.innerWidth - popoverWidth - VIEWPORT_MARGIN
+      );
+      const left = Math.min(Math.max(rect.left, VIEWPORT_MARGIN), maxLeft);
+
+      // 纵向：先尝试向下展开，浮层预估高度（与 wheel + footer 实际一致）
+      const estimatedHeight = VIEWPORT_HEIGHT + 80; // 5 item + p-3 padding + footer
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      let top: number;
+      if (spaceBelow >= estimatedHeight + VIEWPORT_MARGIN) {
+        // 下方空间够：向下展开
+        top = rect.bottom + 6;
+      } else if (spaceAbove >= estimatedHeight + VIEWPORT_MARGIN) {
+        // 下方不够但上方够：向上展开
+        top = rect.top - estimatedHeight - 6;
+      } else {
+        // 上下都不够：选空间更大的一侧
+        if (spaceAbove > spaceBelow) {
+          top = VIEWPORT_MARGIN;
+        } else {
+          top = Math.max(VIEWPORT_MARGIN, window.innerHeight - estimatedHeight - VIEWPORT_MARGIN);
+        }
+      }
+
+      setPos({ top, left, width: popoverWidth });
     }
     reposition();
     window.addEventListener('resize', reposition);
@@ -141,15 +179,35 @@ export function TimeWheelPicker({
     setOpen(false);
   }
 
+  /**
+   * 触发器 = `<div role="button">` + 同级真正的 `<button>`（清除）。
+   *
+   * 旧实现把"清除 ×"塞在外层 `<button>` 里用 `role="button"` 表示，违反了
+   * WAI-ARIA "不可交互元素嵌套"原则（一个 `<button>` 里再嵌一个 `role="button"`）。
+   * 现在把外层改为 `div role="button" tabIndex={0}`，清除按钮作为真正独立
+   * 的 `<button>` 与外层平级（绝对定位，不撑大触发器尺寸）。
+   *
+   * 键盘可访问性：
+   *   - 外层 div 监听 `Enter` / `Space` → 切换 open；
+   *   - 清除按钮独立聚焦、`aria-label="清除提醒时间"`、`type="button"` 防止
+   *     触发表单提交。
+   */
   return (
-    <>
-      <button
+    <div className="relative">
+      <div
         ref={triggerRef}
-        type="button"
+        role="button"
+        tabIndex={0}
         aria-label={ariaLabel}
         data-testid={testId}
         onClick={() => setOpen((prev) => !prev)}
-        className={`mt-1 flex h-8 w-full items-center gap-2 rounded-md border bg-white px-2 text-left text-[13px] transition focus:outline-none focus:ring-0 ${
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setOpen((prev) => !prev);
+          }
+        }}
+        className={`mt-1 flex h-8 w-full items-center gap-2 rounded-md border bg-white px-2 pr-7 text-left text-[13px] transition focus:outline-none focus:ring-0 ${
           value
             ? 'border-assistant-accent/50 text-assistant-ink hover:border-assistant-accent'
             : 'border-assistant-line text-assistant-muted hover:border-assistant-accent/50'
@@ -157,20 +215,21 @@ export function TimeWheelPicker({
       >
         <Clock size={14} className="flex-none text-assistant-muted" />
         <span className="flex-1 truncate">{value || placeholder}</span>
-        {value ? (
-          <span
-            role="button"
-            aria-label="清除提醒时间"
-            className="flex h-5 w-5 flex-none items-center justify-center rounded text-assistant-muted transition hover:bg-assistant-wash hover:text-assistant-warning"
-            onClick={(event) => {
-              event.stopPropagation();
-              onClear();
-            }}
-          >
-            <X size={12} />
-          </span>
-        ) : null}
-      </button>
+      </div>
+      {value ? (
+        <button
+          type="button"
+          aria-label="清除提醒时间"
+          data-testid={testId ? `${testId}-clear` : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClear();
+          }}
+          className="absolute right-1 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded text-assistant-muted transition hover:bg-assistant-wash hover:text-assistant-warning focus:outline-none focus:ring-0"
+        >
+          <X size={12} />
+        </button>
+      ) : null}
       {open && typeof document !== 'undefined'
         ? createPortal(
             <div
@@ -228,7 +287,7 @@ export function TimeWheelPicker({
             document.body
           )
         : null}
-    </>
+    </div>
   );
 }
 

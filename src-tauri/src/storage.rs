@@ -40,10 +40,6 @@ impl Storage {
         Self { data_dir }
     }
 
-    pub fn data_dir(&self) -> &Path {
-        &self.data_dir
-    }
-
     /// 确保数据目录存在（递归创建）。
     pub fn ensure_dir(&self) -> StorageResult<()> {
         if !self.data_dir.exists() {

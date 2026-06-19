@@ -5,9 +5,10 @@
 //! 设计目标：
 //!   1. 调度循环跑在 Rust 主进程的独立后台线程，不依赖 React / `setInterval`。
 //!   2. 处理以下提醒行为：
-//!      - 待办到点提醒（reminderTime 已到、completed=false、remindedAt=null）
-//!      - 待办提前提醒（reminderTime - advanceReminderMinutes 窗口内）
-//!      - 健康提醒循环（enabled=true、nextTriggerAt 已过）
+//!      - 待办提前提醒：在 `reminderTime - advanceReminderMinutes` 窗口内
+//!        （默认提前 10 分钟，**只提醒一次**），到点不再提醒，
+//!        错过提前窗口不补提醒；
+//!      - 健康提醒循环：`enabled=true` 且 `nextTriggerAt` 已过。
 //!   3. 命中后调用已有的 `window_manager::show_popup` 复用同一份弹窗逻辑。
 //!   4. 状态变更后持久化到 `todos.json` / `reminders.json`，并通过
 //!      `state-changed` 事件推给前端，让 TodoPanel / HealthWindow 实时刷新。

@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AddTodoInput, AppSnapshot, Todo, UpdateTodoInput } from '../shared/types';
 import { TODO_PRIORITY_DEFAULT } from '../shared/types';
@@ -41,6 +42,11 @@ function readPopupPayloadFromUrl(): {
 
 export function App() {
   const [state, setState] = useState<SnapshotState>({ kind: 'loading' });
+  // 操作错误提示：除了 console.error，UI 顶部也显示一行低干扰错误。
+  // 后端 command（addTodo / updateTodo / deleteTodo / addReminder / updateReminder /
+  // deleteReminder / toggleTodo / toggleReminder）失败时设置，下次 snapshot 广播
+  // 或 5s 自动清除。
+  const [operationError, setOperationError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const view = new URLSearchParams(window.location.search).get('view') ?? 'todo';
 
@@ -70,7 +76,33 @@ export function App() {
   // 闭包需要捕获到函数引用。
   function setSnapshotSafe(next: AppSnapshot) {
     setState({ kind: 'ready', snapshot: next });
+    // snapshot 成功刷新 → 自动清掉之前残留的"操作失败"提示。
+    setOperationError(null);
   }
+
+  /**
+   * 把 IPC 失败包装成"UI 错误条 + console.warn"。
+   *   - 后端 `update_todo` / `toggle_todo` 对不存在 id 现在会返错（避免静默掩盖同步失败）；
+   *     这些错误要给用户看。
+   *   - 不引入 toast 库，5 秒后自动消失（或下次成功操作时立刻清掉）。
+   */
+  function reportOperationError(context: string, error: unknown) {
+    console.warn(`[App] ${context} failed:`, error);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : '操作失败，请稍后重试';
+    setOperationError(`${context}：${message}`);
+  }
+
+  // 5s 自动清除残留错误（不阻塞新错误覆盖）。
+  useEffect(() => {
+    if (!operationError) return;
+    const timer = window.setTimeout(() => setOperationError(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [operationError]);
 
   useEffect(() => {
     if (view !== 'health') return;
@@ -130,43 +162,100 @@ export function App() {
 
   if (view === 'health') {
     return (
-      <HealthWindow
-        reminders={snapshot.reminders}
-        now={now}
-        onToggle={(id) =>
-          void desktopApi.reminder.toggleReminder(id).then(setSnapshotSafe).catch(console.error)
-        }
-        onAdd={(input) =>
-          void desktopApi.reminder.addReminder(input).then(setSnapshotSafe).catch(console.error)
-        }
-        onUpdate={(id, input) =>
-          void desktopApi.reminder.updateReminder(id, input).then(setSnapshotSafe).catch(console.error)
-        }
-        onDelete={(id) =>
-          void desktopApi.reminder.deleteReminder(id).then(setSnapshotSafe).catch(console.error)
-        }
-      />
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
+        {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
+        <div className="min-h-0 flex-1">
+          <HealthWindow
+            reminders={snapshot.reminders}
+            now={now}
+            onToggle={(id) =>
+              void desktopApi.reminder
+                .toggleReminder(id)
+                .then(setSnapshotSafe)
+                .catch((error) => reportOperationError('运行/暂停失败', error))
+            }
+            onAdd={(input) =>
+              void desktopApi.reminder
+                .addReminder(input)
+                .then(setSnapshotSafe)
+                .catch((error) => reportOperationError('添加提醒失败', error))
+            }
+            onUpdate={(id, input) =>
+              void desktopApi.reminder
+                .updateReminder(id, input)
+                .then(setSnapshotSafe)
+                .catch((error) => reportOperationError('保存提醒失败', error))
+            }
+            onDelete={(id) =>
+              void desktopApi.reminder
+                .deleteReminder(id)
+                .then(setSnapshotSafe)
+                .catch((error) => reportOperationError('删除提醒失败', error))
+            }
+          />
+        </div>
+      </div>
     );
   }
 
   // 默认（也包括历史上的 'ball' / 其它非法 view）：渲染 TodoPanel。
   return (
-    <TodoPanel
-      dateLabel={dateLabel}
-      todos={todos}
-      onAdd={(input: AddTodoInput) =>
-        void desktopApi.todo.addTodo(input).then(setSnapshotSafe).catch(console.error)
-      }
-      onToggle={(id) =>
-        void desktopApi.todo.toggleTodo(id).then(setSnapshotSafe).catch(console.error)
-      }
-      onDelete={(id) =>
-        void desktopApi.todo.deleteTodo(id).then(setSnapshotSafe).catch(console.error)
-      }
-      onUpdate={(id: string, input: UpdateTodoInput) =>
-        void desktopApi.todo.updateTodo(id, input).then(setSnapshotSafe).catch(console.error)
-      }
-    />
+    <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
+      {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
+      <div className="min-h-0 flex-1">
+        <TodoPanel
+          dateLabel={dateLabel}
+          todos={todos}
+          onAdd={(input: AddTodoInput) =>
+            void desktopApi.todo
+              .addTodo(input)
+              .then(setSnapshotSafe)
+              .catch((error) => reportOperationError('添加待办失败', error))
+          }
+          onToggle={(id) =>
+            void desktopApi.todo
+              .toggleTodo(id)
+              .then(setSnapshotSafe)
+              .catch((error) => reportOperationError('更新状态失败', error))
+          }
+          onDelete={(id) =>
+            void desktopApi.todo
+              .deleteTodo(id)
+              .then(setSnapshotSafe)
+              .catch((error) => reportOperationError('删除待办失败', error))
+          }
+          onUpdate={(id: string, input: UpdateTodoInput) =>
+            void desktopApi.todo
+              .updateTodo(id, input)
+              .then(setSnapshotSafe)
+              .catch((error) => reportOperationError('保存待办失败', error))
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/** 低干扰错误条：固定在窗口顶部，红边 + 错误图标 + 文本 + 关闭按钮。 */
+function OperationErrorBar({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-none items-center gap-2 border-b border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] text-orange-800"
+    >
+      <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-assistant-warning text-white">
+        <AlertTriangle size={12} />
+      </span>
+      <span className="flex-1 truncate">{message}</span>
+      <button
+        type="button"
+        aria-label="关闭错误提示"
+        className="flex h-5 w-5 flex-none items-center justify-center rounded text-orange-700 transition hover:bg-orange-100 focus:outline-none focus:ring-0"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
   );
 }
 

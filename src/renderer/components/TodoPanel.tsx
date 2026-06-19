@@ -146,14 +146,13 @@ export function TodoPanel({ dateLabel, todos, onAdd, onToggle, onDelete, onUpdat
           </p>
         </div>
         <div className="no-drag flex flex-none items-center">
-          <button
-            aria-label="添加待办"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted transition hover:border-assistant-accent hover:text-assistant-accent"
-            type="button"
+          <ActionButton
+            variant="muted"
+            size="icon"
+            icon={<Plus size={14} />}
+            ariaLabel="添加待办"
             onClick={() => setAdding((value) => !value)}
-          >
-            <Plus size={14} />
-          </button>
+          />
         </div>
       </header>
 

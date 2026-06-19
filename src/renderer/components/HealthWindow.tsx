@@ -43,14 +43,12 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
   const [intervalMinutes, setIntervalMinutes] = useState('30');
   const [message, setMessage] = useState(createDefaultHealthReminderMessage(30));
   const [messageEdited, setMessageEdited] = useState(false);
-  const [soundFilePath, setSoundFilePath] = useState('');
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editIntervalMinutes, setEditIntervalMinutes] = useState('30');
   const [editMessage, setEditMessage] = useState(createDefaultHealthReminderMessage(30));
   const [editMessageEdited, setEditMessageEdited] = useState(false);
-  const [editSoundFilePath, setEditSoundFilePath] = useState('');
   const [editError, setEditError] = useState('');
 
   function submit(event: FormEvent) {
@@ -79,12 +77,11 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
       return;
     }
 
-    onAdd({ name: trimmedName, intervalMinutes: interval, message: trimmedMessage, soundFilePath: soundFilePath || null });
+    onAdd({ name: trimmedName, intervalMinutes: interval, message: trimmedMessage, soundFilePath: null });
     setName('');
     setIntervalMinutes('30');
     setMessage(createDefaultHealthReminderMessage(30));
     setMessageEdited(false);
-    setSoundFilePath('');
     setAdding(false);
     setError('');
   }
@@ -104,7 +101,6 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
     setEditIntervalMinutes(String(reminder.intervalMinutes));
     setEditMessage(getHealthReminderMessage(reminder));
     setEditMessageEdited(false);
-    setEditSoundFilePath(reminder.soundFilePath ?? '');
     setEditError('');
   }
 
@@ -140,7 +136,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
       name: trimmedName,
       intervalMinutes: interval,
       message: trimmedMessage,
-      soundFilePath: editSoundFilePath || null
+      soundFilePath: null
     });
     setEditingId(null);
     setEditError('');
@@ -193,14 +189,13 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
           </p>
         </div>
         <div className="no-drag flex flex-none items-center">
-          <button
-            aria-label="添加提醒"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-assistant-line text-assistant-muted hover:border-assistant-accent hover:text-assistant-accent"
-            type="button"
+          <ActionButton
+            variant="muted"
+            size="icon"
+            icon={<Plus size={14} />}
+            ariaLabel="添加提醒"
             onClick={() => setAdding((value) => !value)}
-          >
-            <Plus size={14} />
-          </button>
+          />
         </div>
       </header>
 
@@ -224,7 +219,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                 }}
               />
             </label>
-            <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+            <div className="grid grid-cols-1 items-end gap-2">
               <label className="block text-[11px] text-assistant-muted">
                 间隔分钟
                 <input
@@ -237,18 +232,10 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                   onChange={(event) => updateAddInterval(event.target.value)}
                 />
               </label>
-              <label className="block text-[11px] text-assistant-muted">
-                提示音附件
-                <input
-                  accept="audio/*"
-                  aria-label="提示音附件"
-                  className="mt-1 w-32 text-[11px] text-assistant-muted file:mr-2 file:rounded-md file:border-0 file:bg-assistant-accent file:px-2 file:py-1 file:text-[11px] file:text-white"
-                  type="file"
-                  onChange={(event) => setSoundFilePath(selectedFilePath(event.currentTarget))}
-                />
-              </label>
+              <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
+                🔔 当前使用默认提示音（xianchen_ice_sparkle_1p5s.wav）；自定义附件能力暂不可用。
+              </p>
             </div>
-            {soundFilePath ? <p className="truncate text-[11px] text-assistant-muted">已选择：{fileNameFromPath(soundFilePath)}</p> : null}
             <label className="block text-[11px] text-assistant-muted">
               提醒内容
               <textarea
@@ -396,7 +383,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                         }}
                       />
                     </label>
-                    <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                    <div className="grid grid-cols-1 items-end gap-2">
                       <label className="block text-[11px] text-assistant-muted">
                         修改间隔分钟
                         <input
@@ -409,20 +396,10 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                           onChange={(event) => updateEditInterval(event.target.value)}
                         />
                       </label>
-                      <label className="block text-[11px] text-assistant-muted">
-                        修改提示音附件
-                        <input
-                          accept="audio/*"
-                          aria-label="修改提示音附件"
-                          className="mt-1 w-32 text-[11px] text-assistant-muted file:mr-2 file:rounded-md file:border-0 file:bg-assistant-accent file:px-2 file:py-1 file:text-[11px] file:text-white"
-                          type="file"
-                          onChange={(event) => setEditSoundFilePath(selectedFilePath(event.currentTarget))}
-                        />
-                      </label>
+                      <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
+                        🔔 当前使用默认提示音（xianchen_ice_sparkle_1p5s.wav）；自定义附件能力暂不可用。
+                      </p>
                     </div>
-                    {editSoundFilePath ? (
-                      <p className="truncate text-[11px] text-assistant-muted">已选择：{fileNameFromPath(editSoundFilePath)}</p>
-                    ) : null}
                     <label className="block text-[11px] text-assistant-muted">
                       修改提醒内容
                       <textarea
@@ -469,15 +446,6 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
 function intervalFromValue(value: string): number {
   const interval = Number(value);
   return Number.isFinite(interval) && interval > 0 ? interval : 30;
-}
-
-function selectedFilePath(input: HTMLInputElement): string {
-  const file = input.files?.[0] as (File & { path?: string }) | undefined;
-  return file?.path ?? input.value;
-}
-
-function fileNameFromPath(filePath: string): string {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
 function InlineAlert({ children }: { children: string }) {

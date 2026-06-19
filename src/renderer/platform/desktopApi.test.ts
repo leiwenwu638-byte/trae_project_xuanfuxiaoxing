@@ -382,10 +382,10 @@ describe('desktopApi', () => {
     });
   });
 
-  describe('REQUIRED_TAURI_COMMANDS', () => {
+  describe('REQUIRED_TAURI_COMMANDS_FOR_TEST', () => {
     it('contains all required data, window, and scheduler commands', async () => {
       const mod = await import('./desktopApi');
-      const required = mod.__testing__.REQUIRED_TAURI_COMMANDS;
+      const required = mod.__testing__.REQUIRED_TAURI_COMMANDS_FOR_TEST;
       const expected = [
         'get_snapshot',
         'list_todos',
@@ -414,14 +414,14 @@ describe('desktopApi', () => {
       for (const cmd of expected) {
         expect(
           required.has(cmd),
-          `REQUIRED_TAURI_COMMANDS must contain ${cmd}`
+          `REQUIRED_TAURI_COMMANDS_FOR_TEST must contain ${cmd}`
         ).toBe(true);
       }
     });
 
     it('does not treat notification as a required command', async () => {
       const mod = await import('./desktopApi');
-      const required = mod.__testing__.REQUIRED_TAURI_COMMANDS;
+      const required = mod.__testing__.REQUIRED_TAURI_COMMANDS_FOR_TEST;
       expect(required.has('show_notification')).toBe(false);
     });
   });

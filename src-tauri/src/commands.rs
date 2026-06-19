@@ -36,7 +36,7 @@ use uuid::Uuid;
 use crate::models::{
     add_minutes, create_default_health_reminders, default_app_settings, local_date_key, to_hhmm,
     to_iso, AddHealthReminderInput, AddTodoInput, AppSettings, AppSnapshot, HealthReminder,
-    ReminderPopupPayload, Todo, TodoPriority, UpdateHealthReminderInput, UpdateSettingsInput,
+    ReminderPopupPayload, Todo, TodoStore, UpdateHealthReminderInput, UpdateSettingsInput,
     UpdateTodoInput,
 };
 use crate::scheduler::{Scheduler, SchedulerStatus};
@@ -119,8 +119,12 @@ pub fn add_todo(
     state: State<'_, AppState>,
     input: AddTodoInput,
 ) -> CmdResult<AppSnapshot> {
+    // 标题校验：即使前端 submit 已 trim，绕过前端直接 invoke 仍需后端兜底。
+    // 校验通过后得到的 `title` 一定是 trim 后的、长度合法的、且非空字符串，
+    // 后续 `build_new_todo` 不再重复 trim，避免规则漂移。
+    let title = validate_title(&input.title)?;
     let reminder_time = normalize_reminder_time(input.reminder_time.as_deref())?;
-    let todo = build_new_todo(&input, reminder_time);
+    let todo = build_new_todo(&input, title, reminder_time);
     let today = local_date_key(Local::now());
 
     {
@@ -147,14 +151,8 @@ pub fn update_todo(
 
     {
         let mut store = state.todo_store.lock().map_err(stringify)?;
-        if let Some(entry) = store.get_mut(&today) {
-            for todo in entry.iter_mut() {
-                if todo.id == id {
-                    apply_todo_update(todo, title, reminder_time, &input);
-                    break;
-                }
-            }
-        }
+        let todo = find_today_todo_mut(&mut store, &today, &id)?;
+        apply_todo_update(todo, title, reminder_time, &input);
         state.persist_todos(&store).map_err(stringify)?;
     }
 
@@ -200,14 +198,8 @@ pub fn toggle_todo(
     let today = local_date_key(Local::now());
     {
         let mut store = state.todo_store.lock().map_err(stringify)?;
-        if let Some(entry) = store.get_mut(&today) {
-            for todo in entry.iter_mut() {
-                if todo.id == id {
-                    todo.completed = !todo.completed;
-                    break;
-                }
-            }
-        }
+        let todo = find_today_todo_mut(&mut store, &today, &id)?;
+        todo.completed = !todo.completed;
         state.persist_todos(&store).map_err(stringify)?;
     }
     broadcast_snapshot(&app, &state);
@@ -529,8 +521,7 @@ fn normalize_reminder_time(value: Option<&str>) -> CmdResult<Option<String>> {
     Ok(Some(format!("{h:02}:{m:02}")))
 }
 
-fn build_new_todo(input: &AddTodoInput, reminder_time: Option<String>) -> Todo {
-    let title = input.title.trim().to_string();
+fn build_new_todo(input: &AddTodoInput, title: String, reminder_time: Option<String>) -> Todo {
     let now = Local::now();
     Todo {
         id: Uuid::new_v4().to_string(),
@@ -544,6 +535,27 @@ fn build_new_todo(input: &AddTodoInput, reminder_time: Option<String>) -> Todo {
         reminded_at: None,
         created_at: to_iso(now),
     }
+}
+
+/// 在 `TodoStore` 中按 `today` 找一条 todo，返回可变引用。
+///
+///   - `today` 这一组不存在（今天还没创建 todo）→ `Err` "待办不存在或已被删除"；
+///   - `today` 这一组存在但没有匹配 `id` 的 todo → 同上 `Err`。
+///
+/// 抽成纯函数后 `update_todo` / `toggle_todo` 复用，单测可直接覆盖错误分支，
+/// 不用启动 Tauri 状态机。返回的具体消息包含 `id`，便于前端展示。
+fn find_today_todo_mut<'a>(
+    store: &'a mut TodoStore,
+    today: &str,
+    id: &str,
+) -> CmdResult<&'a mut Todo> {
+    let entry = store
+        .get_mut(today)
+        .ok_or_else(|| format!("待办不存在或已被删除（id: {id}）"))?;
+    entry
+        .iter_mut()
+        .find(|t| t.id == id)
+        .ok_or_else(|| format!("待办不存在或已被删除（id: {id}）"))
 }
 
 fn build_new_reminder(
@@ -665,6 +677,11 @@ pub fn stop_scheduler(scheduler: State<'_, Scheduler>) -> CmdResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // TodoPriority 仅在测试代码中使用（如 `assert_eq!(...Medium)`），
+    // 业务层并不直接命名枚举值（统一走 `Option<TodoPriority>::unwrap_or_default`）。
+    // 因此从顶层 `use crate::models::{...}` 移除，只在测试作用域内引入。
+    use crate::models::TodoPriority;
+    use std::collections::BTreeMap;
 
     fn sample_input(title: &str) -> AddTodoInput {
         AddTodoInput {
@@ -790,7 +807,7 @@ mod tests {
     fn build_new_todo_applies_explicit_priority() {
         let mut input = sample_input("重要的任务");
         input.priority = Some(TodoPriority::High);
-        let todo = build_new_todo(&input, None);
+        let todo = build_new_todo(&input, "重要的任务".to_string(), None);
         assert_eq!(todo.priority, TodoPriority::High);
     }
 
@@ -798,8 +815,33 @@ mod tests {
     fn build_new_todo_defaults_priority_to_medium() {
         let input = sample_input("普通任务");
         // priority: None
-        let todo = build_new_todo(&input, None);
+        let todo = build_new_todo(&input, "普通任务".to_string(), None);
         assert_eq!(todo.priority, TodoPriority::Medium);
+    }
+
+    // ---- validate_title 行为（add_todo 复用）----
+
+    #[test]
+    fn validate_title_rejects_empty_and_whitespace() {
+        assert!(validate_title("").is_err());
+        assert!(validate_title("   ").is_err());
+        assert!(validate_title("\t\n").is_err());
+    }
+
+    #[test]
+    fn validate_title_rejects_too_long() {
+        // 41 个字符（含 1 个中文计为 1 char）应该超 40 限制
+        let too_long = "a".repeat(41);
+        assert!(validate_title(&too_long).is_err());
+    }
+
+    #[test]
+    fn validate_title_trims_and_returns_owned() {
+        let ok = validate_title("  写报告  ").unwrap();
+        assert_eq!(ok, "写报告");
+        // 40 字上限内
+        let max_len = "a".repeat(40);
+        assert!(validate_title(&max_len).is_ok());
     }
 
     /// `update_todo` 内部走 [`apply_todo_update`] 纯函数，测试直接覆盖它
@@ -906,6 +948,85 @@ mod tests {
         };
         apply_todo_update(&mut todo, "t".to_string(), None, &input);
         assert!(todo.sound_enabled, "soundEnabled 缺省应保持原 true");
+    }
+
+    // ---- find_today_todo_mut（update_todo / toggle_todo 复用）----
+
+    fn sample_todo(id: &str, title: &str) -> Todo {
+        Todo {
+            id: id.to_string(),
+            title: title.to_string(),
+            reminder_time: None,
+            sound_enabled: true,
+            completed: false,
+            priority: TodoPriority::Medium,
+            advance_reminded_at: None,
+            reminded_at: None,
+            created_at: "2026-06-17T08:00:00.000+08:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn find_today_todo_mut_returns_mut_ref_for_existing_id() {
+        // 命中：返回 `&mut Todo`，允许 update / toggle 直接修改字段。
+        let mut store: TodoStore = BTreeMap::new();
+        store.insert("2026-06-19".to_string(), vec![sample_todo("a", "A")]);
+        let todo = find_today_todo_mut(&mut store, "2026-06-19", "a").expect("a 必须存在");
+        assert_eq!(todo.title, "A");
+        todo.completed = true;
+        assert!(store.get("2026-06-19").unwrap()[0].completed);
+    }
+
+    #[test]
+    fn find_today_todo_mut_errors_when_day_group_missing() {
+        // 今天还没有 todo（store 里完全没这条日期）→ 应返回 "待办不存在或已被删除"
+        let mut store: TodoStore = BTreeMap::new();
+        let err = find_today_todo_mut(&mut store, "2026-06-19", "ghost").unwrap_err();
+        assert!(err.contains("待办不存在或已被删除"), "got: {err}");
+        assert!(err.contains("ghost"), "err must include id: {err}");
+    }
+
+    #[test]
+    fn find_today_todo_mut_errors_when_id_missing_in_existing_day() {
+        // 今天有 todo 但 id 不匹配 → 同样 "待办不存在或已被删除"
+        let mut store: TodoStore = BTreeMap::new();
+        store.insert("2026-06-19".to_string(), vec![sample_todo("a", "A")]);
+        let err = find_today_todo_mut(&mut store, "2026-06-19", "ghost").unwrap_err();
+        assert!(err.contains("待办不存在或已被删除"), "got: {err}");
+    }
+
+    #[test]
+    fn find_today_todo_mut_distinguishes_day_mismatch() {
+        // 同 id 在不同日期 → 不应误命中（用户昨天删了同名 todo，但 id 不同也不影响）
+        let mut store: TodoStore = BTreeMap::new();
+        store.insert(
+            "2026-06-18".to_string(),
+            vec![sample_todo("a", "Yesterday")],
+        );
+        let err = find_today_todo_mut(&mut store, "2026-06-19", "a").unwrap_err();
+        assert!(err.contains("待办不存在或已被删除"), "got: {err}");
+    }
+
+    // ---- delete_todo 幂等行为（不抽函数，直接验状态机模拟）----
+    // 这里用 `BTreeMap` + `Vec::retain` 模拟 delete_todo 内部的"按 id 过滤"逻辑：
+    // `delete_todo` 的命令体在生产路径上被设计为幂等——id 不存在也返回成功，
+    // 不抛错（与 `update_todo` / `toggle_todo` 不同：那两个会"误以为同步失败"而报错）。
+    #[test]
+    fn delete_todo_idempotent_retain_behavior() {
+        // store 中有 a / b，删除 c（不存在）→ 长度仍为 2，且 a / b 都还在。
+        let mut store: TodoStore = BTreeMap::new();
+        let day = "2026-06-19".to_string();
+        store.insert(
+            day.clone(),
+            vec![sample_todo("a", "A"), sample_todo("b", "B")],
+        );
+        if let Some(entry) = store.get_mut(&day) {
+            entry.retain(|t| t.id != "c");
+        }
+        let entry = store.get(&day).unwrap();
+        assert_eq!(entry.len(), 2);
+        let ids: Vec<&str> = entry.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, vec!["a", "b"]);
     }
 
     // ---- delete_reminder / purge_reminder ----
