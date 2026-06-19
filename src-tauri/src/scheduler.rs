@@ -130,10 +130,7 @@ pub fn compute_tick(
 
     // ----- 1. 待办提前 10 分钟提醒（提醒一次，命中后写回 advance_reminded_at）-----
     for todo in next_todos.iter_mut() {
-        if todo.completed
-            || todo.reminder_time.is_none()
-            || todo.advance_reminded_at.is_some()
-        {
+        if todo.completed || todo.reminder_time.is_none() || todo.advance_reminded_at.is_some() {
             continue;
         }
         let reminder_time = match &todo.reminder_time {
@@ -484,8 +481,8 @@ fn build_snapshot_for_emit(state: &AppState, today: &str) -> crate::models::AppS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use crate::models::TodoPriority;
+    use chrono::TimeZone;
 
     fn sample_now() -> DateTime<Local> {
         Local
@@ -580,10 +577,7 @@ mod tests {
             .unwrap();
         let todos = vec![todo_with("t1", "开会", Some("09:30"))];
         let plan = compute_tick("2026-06-17", &todos, &[], now);
-        assert!(
-            plan.outcome.events.is_empty(),
-            "任务时间已过不应补提醒"
-        );
+        assert!(plan.outcome.events.is_empty(), "任务时间已过不应补提醒");
         assert!(!plan.outcome.todos_changed);
     }
 

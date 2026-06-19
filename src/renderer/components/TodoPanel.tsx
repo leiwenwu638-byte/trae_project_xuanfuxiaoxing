@@ -15,7 +15,6 @@ type TodoPanelProps = {
   dateLabel: string;
   todos: Todo[];
   onAdd: (input: AddTodoInput) => void;
-  onClose: () => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, input: UpdateTodoInput) => void;
@@ -36,7 +35,7 @@ type TodoPanelProps = {
  *   - 列表非空时只显示 `unfinishedCount` 一句，**不**叠加"今日事项已清空"等
  *     历史重复标签。
  */
-export function TodoPanel({ dateLabel, todos, onAdd, onClose, onToggle, onDelete, onUpdate }: TodoPanelProps) {
+export function TodoPanel({ dateLabel, todos, onAdd, onToggle, onDelete, onUpdate }: TodoPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [reminderTime, setReminderTime] = useState('');
@@ -277,22 +276,20 @@ export function TodoPanel({ dateLabel, todos, onAdd, onClose, onToggle, onDelete
                   ) : (
                     <span className="text-[11px] text-assistant-muted">无提醒</span>
                   )}
-                  <button
-                    aria-label={`编辑：${todo.title}`}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-assistant-muted transition hover:border-assistant-line hover:bg-white hover:text-assistant-accent"
-                    type="button"
+                  <ActionButton
+                    variant="muted"
+                    size="icon"
+                    icon={<Pencil size={14} />}
+                    ariaLabel={`编辑：${todo.title}`}
                     onClick={() => startEdit(todo)}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    aria-label={`删除：${todo.title}`}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-assistant-muted transition hover:border-assistant-line hover:bg-white hover:text-assistant-warning"
-                    type="button"
+                  />
+                  <ActionButton
+                    variant="danger"
+                    size="icon"
+                    icon={<Trash2 size={14} />}
+                    ariaLabel={`删除：${todo.title}`}
                     onClick={() => onDelete(todo.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  />
                 </div>
                 {editingId === todo.id ? (
                   <form className="todo-form-enter mt-3 space-y-2 rounded-md border border-dashed border-assistant-line bg-white/80 p-2" onSubmit={submitEdit}>

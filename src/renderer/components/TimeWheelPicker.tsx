@@ -40,22 +40,33 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
 const ITEM_HEIGHT = 36; // 每个时间项高度（px），与 css 保持一致
 const PADDING_ITEMS = 2; // 顶部 / 底部各 2 个不可见 padding item
 const VIEWPORT_HEIGHT = 5 * ITEM_HEIGHT; // 5 个 item 可见（中间 + 上下各 2）
+/**
+ * 默认回退时间：09:00。
+ *
+ * 选择理由：学习 / 工作场景的"上午开始认真做事"心智默认时间，
+ * 提醒弹窗在这个时间出现是用户最容易接受的状态；如果 `value` 是
+ * `null` 或解析失败，小时回退到 09、分钟回退到 00，保证 pick 出来
+ * 永远是合法 `HH:mm`（00:00、09:30、23:59 都能正常选；不会出现
+ * 24:00 / 99:99 / 带时区后缀的 `+08:30` 之类非法值）。
+ */
+const DEFAULT_HOUR = '09';
+const DEFAULT_MINUTE = '00';
 
 function parseHour(value: string | null): string {
-  if (!value) return '09';
+  if (!value) return DEFAULT_HOUR;
   const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return '09';
+  if (!match) return DEFAULT_HOUR;
   const h = Number(match[1]);
-  if (h < 0 || h > 23) return '09';
+  if (h < 0 || h > 23) return DEFAULT_HOUR;
   return String(h).padStart(2, '0');
 }
 
 function parseMinute(value: string | null): string {
-  if (!value) return '00';
+  if (!value) return DEFAULT_MINUTE;
   const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return '00';
+  if (!match) return DEFAULT_MINUTE;
   const m = Number(match[2]);
-  if (m < 0 || m > 59) return '00';
+  if (m < 0 || m > 59) return DEFAULT_MINUTE;
   return String(m).padStart(2, '0');
 }
 

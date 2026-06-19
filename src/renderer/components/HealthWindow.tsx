@@ -16,7 +16,6 @@ type HealthWindowProps = {
   onAdd: (input: AddHealthReminderInput) => void;
   onUpdate: (id: string, input: UpdateHealthReminderInput) => void;
   onDelete: (id: string) => void;
-  onClose: () => void;
 };
 
 /**
@@ -38,7 +37,7 @@ type HealthWindowProps = {
  *     防止误触，命中后走 `onDelete` → `desktopApi.reminder.deleteReminder` →
  *     Tauri 端 `reminders.retain(...)` 落盘 `reminders.json`。
  */
-export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDelete, onClose }: HealthWindowProps) {
+export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDelete }: HealthWindowProps) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [intervalMinutes, setIntervalMinutes] = useState('30');
@@ -440,21 +439,20 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                     </label>
                     {editError ? <InlineAlert>{editError}</InlineAlert> : null}
                     <div className="flex justify-end gap-2.5">
-                      <button
-                        aria-label="取消修改"
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-assistant-muted hover:bg-white"
-                        type="button"
+                      <ActionButton
+                        variant="ghost"
+                        size="icon"
+                        icon={<X size={14} />}
+                        ariaLabel="取消修改"
                         onClick={() => setEditingId(null)}
-                      >
-                        <X size={14} />
-                      </button>
-                      <button
-                        aria-label="保存修改"
-                        className="flex h-7 w-7 items-center justify-center rounded-md bg-assistant-accent text-white"
+                      />
+                      <ActionButton
+                        variant="primary"
+                        size="icon"
+                        icon={<Check size={14} />}
+                        ariaLabel="保存修改"
                         type="submit"
-                      >
-                        <Check size={14} />
-                      </button>
+                      />
                     </div>
                   </form>
                 ) : null}

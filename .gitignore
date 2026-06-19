@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+release/
 
 # IDE / Editor
 .idea/
@@ -13,6 +14,7 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Environment
 .env
@@ -25,6 +27,21 @@ logs/
 
 # Superpowers
 .superpowers/
+
+# Tauri / Rust generated artifacts
+# (src-tauri/.gitignore 已覆盖 src-tauri/target/、gen/schemas/、.tauri/，
+#  下面这行是兜底，防止子 .gitignore 被误删时漏掉)
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/.tauri/
+
+# Tauri 打包产物（按平台）
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
 
 # Debug
 npm-debug.log*

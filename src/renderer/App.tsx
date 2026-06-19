@@ -145,7 +145,6 @@ export function App() {
         onDelete={(id) =>
           void desktopApi.reminder.deleteReminder(id).then(setSnapshotSafe).catch(console.error)
         }
-        onClose={() => void desktopApi.window.closeCurrentWindow()}
       />
     );
   }
@@ -158,7 +157,6 @@ export function App() {
       onAdd={(input: AddTodoInput) =>
         void desktopApi.todo.addTodo(input).then(setSnapshotSafe).catch(console.error)
       }
-      onClose={() => void desktopApi.window.closeCurrentWindow()}
       onToggle={(id) =>
         void desktopApi.todo.toggleTodo(id).then(setSnapshotSafe).catch(console.error)
       }

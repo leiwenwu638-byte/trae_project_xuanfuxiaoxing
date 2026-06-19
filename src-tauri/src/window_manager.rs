@@ -50,10 +50,17 @@ use crate::models::ReminderPopupPayload;
 // ---------------------------------------------------------------------------
 
 /// 业务上识别三类窗口。
+///
 /// 不同的 WindowKind 对应不同的 label / title / url / size / 装饰 / 透明 / 置顶。
+///
+/// **Todo** 实际是"main 不可用时的兜底"：正常路径下"今日计划"复用
+/// `tauri.conf.json` 中定义的 main 窗口（400x600 无边框透明），
+/// 只有 main 被销毁时才走 `WindowKind::Todo` 独立建窗。所以这里的
+/// 配置是**兜底**配置——有边框 + 不透明 + 400x600，让用户能正常
+/// 拖动 / 关闭。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowKind {
-    /// 今日待办窗口。题目要求："悬浮小醒 - 今日计划"，800x600，无边框 + 透明，跳过任务栏。
+    /// 今日待办窗口（兜底配置）。题目要求："悬浮小醒 - 今日计划"。
     Todo,
     /// 健康提醒窗口。题目要求："悬浮小醒 - 健康节律"，380x600。
     Health,
@@ -89,10 +96,10 @@ impl WindowKind {
 
     pub fn size(&self) -> (f64, f64) {
         match self {
-            // 主窗口实际尺寸由 tauri.conf.json 提供（400x600），WindowKind::Todo
-            // 当前只用于兜底（main 不存在时建独立 todo 窗口）。800x600 与
-            // 弹窗/历史视觉一致，保留。
-            Self::Todo => (800.0, 600.0),
+            // 兜底窗尺寸与 main 对齐（400x600，定义在 tauri.conf.json 的
+            // `app.windows[0]`）。WindowKind::Todo 当前只用于"main 不存在时
+            // 建独立 todo 窗口"，与 main 同尺寸避免视觉跳跃。
+            Self::Todo => (400.0, 600.0),
             Self::Health => (380.0, 600.0),
             Self::ReminderPopup => (320.0, 180.0),
         }
@@ -100,8 +107,9 @@ impl WindowKind {
 
     pub fn decorations(&self) -> bool {
         match self {
-            // Todo 窗口保持无边框，贴近轻量工具窗体验。
-            Self::Todo => false,
+            // Todo 兜底窗：保留装饰边框，让用户能正常拖动 / 关闭。
+            // （main 是无边框轻量工具窗体验，但兜底场景不该是这种形态）
+            Self::Todo => true,
             Self::Health => true,
             Self::ReminderPopup => false,
         }
@@ -109,7 +117,9 @@ impl WindowKind {
 
     pub fn transparent(&self) -> bool {
         match self {
-            Self::Todo => true,
+            // Todo 兜底窗：必须不透明，否则 React 渲染在没有装饰的窗口里
+            // 看起来很奇怪（透明 + 装饰 = 半透明装饰边框）。
+            Self::Todo => false,
             Self::Health => false,
             Self::ReminderPopup => true,
         }
@@ -131,7 +141,8 @@ impl WindowKind {
 
     pub fn resizable(&self) -> bool {
         match self {
-            Self::Todo => false,
+            // Todo 兜底窗可调整：用户从"无 main 状态"恢复时通常需要更大区域。
+            Self::Todo => true,
             Self::Health => true,
             Self::ReminderPopup => false,
         }
@@ -464,12 +475,16 @@ mod tests {
     }
 
     #[test]
-    fn todo_window_is_undecorated_and_transparent() {
-        assert!(!WindowKind::Todo.decorations());
-        assert!(WindowKind::Todo.transparent());
+    fn todo_window_fallback_is_decorated_400x600_not_transparent() {
+        // Todo fallback 窗口仅在 main 不可用时由 tray / commands 兜底创建，
+        // 因此与 HealthWindow 一样走"有装饰、不透明、可调整"配置，
+        // 避免出现 800x600 / 无边框 / 透明的体验不一致窗口。
+        assert!(WindowKind::Todo.decorations());
+        assert!(!WindowKind::Todo.transparent());
         assert!(!WindowKind::Todo.always_on_top());
         assert!(WindowKind::Todo.skip_taskbar());
-        assert_eq!(WindowKind::Todo.size(), (800.0, 600.0));
+        assert_eq!(WindowKind::Todo.size(), (400.0, 600.0));
+        assert!(WindowKind::Todo.resizable());
     }
 
     #[test]

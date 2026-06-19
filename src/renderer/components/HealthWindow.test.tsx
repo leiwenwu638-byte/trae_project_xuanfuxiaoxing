@@ -33,7 +33,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -54,7 +53,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -70,7 +68,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -96,7 +93,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={onDelete}
-        onClose={vi.fn()}
       />
     );
 
@@ -120,7 +116,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={onDelete}
-        onClose={vi.fn()}
       />
     );
 
@@ -145,7 +140,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={onDelete}
-        onClose={vi.fn()}
       />
     );
 
@@ -165,7 +159,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -185,7 +178,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={onDelete}
-        onClose={vi.fn()}
       />
     );
 
@@ -209,7 +201,6 @@ describe('HealthWindow', () => {
         onAdd={onAdd}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -240,7 +231,6 @@ describe('HealthWindow', () => {
         onAdd={onAdd}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -259,7 +249,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -283,7 +272,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={onUpdate}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 
@@ -313,7 +301,6 @@ describe('HealthWindow', () => {
         onAdd={vi.fn()}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onClose={vi.fn()}
       />
     );
 

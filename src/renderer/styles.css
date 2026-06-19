@@ -48,11 +48,18 @@ textarea {
   font: inherit;
 }
 
+/* 低干扰键盘焦点指示：alpha 0.35 让 outline 看起来更柔，避免紫色"打脸"感。 */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #6c63ff;
+  outline: 2px solid rgba(108, 99, 255, 0.35);
   outline-offset: 2px;
+}
+
+/* 纯文字段落不显示 outline（避免点击段落时出现焦点环） */
+p:focus-visible,
+span:focus-visible {
+  outline: none;
 }
 
 .drag-region {

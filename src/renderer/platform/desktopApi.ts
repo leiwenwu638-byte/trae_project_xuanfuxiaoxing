@@ -135,7 +135,23 @@ async function tauriListen<T>(
   return unlisten;
 }
 
-const CORE_TAURI_COMMANDS = new Set<string>([
+/**
+ * 应用**必需**的 Tauri command 集合（"必需" = 业务依赖、不能静默失败的命令）。
+ *
+ * 名字从历史的 `CORE_TAURI_COMMANDS` 改为 `REQUIRED_TAURI_COMMANDS`：
+ *   - "core" 太泛，混了数据 / 窗口 / 调度 3 类，无法表达"业务必需"语义；
+ *   - "required" 直接对应"如果这个命令失败，应用不能继续运行"。
+ *
+ * 与之相对的"非必需"集合（`safeInvoke` 路径）：
+ *   - `notify`（系统通知）失败时不阻碍主流程
+ *   - `drain_reminder_popups`（前端拉取 popup 队列）失败可重试
+ *
+ * 注：保持**单集合**（不拆 DATA/WINDOW/SCHEDULER），因为调用方关心的
+ * 只是"要不要 console.error / 抛错"这一种行为，再分会让 `coreInvoke`
+ * 和 `safeInvoke` 之间的判断变得分散。本阶段保持现状，下一阶段如
+ * 出现"某类命令静默 / 某类命令报错"的差异化需求，再切到多集合。
+ */
+const REQUIRED_TAURI_COMMANDS = new Set<string>([
   'get_snapshot',
   'list_todos',
   'add_todo',
@@ -329,5 +345,5 @@ const adapter = detectPlatform() === 'tauri' ? createTauriAdapter() : createMock
 export const desktopApi: DesktopApi = adapter;
 
 export const __testing__ = {
-  CORE_TAURI_COMMANDS
+  REQUIRED_TAURI_COMMANDS
 };

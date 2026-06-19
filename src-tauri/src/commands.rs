@@ -873,7 +873,12 @@ mod tests {
             sound_enabled: None,
             priority: None,
         };
-        apply_todo_update(&mut todo, "t".to_string(), Some("11:00".to_string()), &input);
+        apply_todo_update(
+            &mut todo,
+            "t".to_string(),
+            Some("11:00".to_string()),
+            &input,
+        );
         assert_eq!(todo.advance_reminded_at, None);
         assert_eq!(todo.reminded_at, None);
         assert_eq!(todo.reminder_time.as_deref(), Some("11:00"));
@@ -966,7 +971,13 @@ mod tests {
         assert_eq!(reminders[0].id, "b");
         assert_eq!(reminders[0].name, "B");
         assert_eq!(reminders[1].id, "c");
-        assert_eq!(reminders[1].last_triggered_at.as_deref(), Some("2026-06-17T11:00:00.000+08:00"));
-        assert!(!reminders[1].enabled, "C 原本是 disabled，不应被恢复成 enabled");
+        assert_eq!(
+            reminders[1].last_triggered_at.as_deref(),
+            Some("2026-06-17T11:00:00.000+08:00")
+        );
+        assert!(
+            !reminders[1].enabled,
+            "C 原本是 disabled，不应被恢复成 enabled"
+        );
     }
 }
