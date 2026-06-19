@@ -122,6 +122,7 @@ pub fn compute_tick(
     todos: &[Todo],
     reminders: &[HealthReminder],
     now: DateTime<Local>,
+    global_sound_file_path: Option<String>,
 ) -> TickPlan {
     let mut next_todos: Vec<Todo> = todos.to_vec();
     let mut next_reminders: Vec<HealthReminder> = reminders.to_vec();
@@ -157,7 +158,7 @@ pub fn compute_tick(
                 TODO_ADVANCE_MINUTES
             ),
             icon: Some("⏰".to_string()),
-            sound_src: todo.sound_enabled.then(|| "default".to_string()),
+            sound_src: resolve_todo_sound_src(todo.sound_enabled, &global_sound_file_path),
             duration_ms: None,
             reminder_id: Some(todo.id.clone()),
         });
@@ -193,12 +194,11 @@ pub fn compute_tick(
             title: reminder.name.clone(),
             body: reminder.message.clone(),
             icon: Some(reminder.icon.clone()),
-            sound_src: reminder.sound_enabled.then(|| {
-                reminder
-                    .sound_file_path
-                    .clone()
-                    .unwrap_or_else(|| "default".to_string())
-            }),
+            sound_src: resolve_health_sound_src(
+                reminder.sound_enabled,
+                reminder.sound_file_path.as_ref(),
+                &global_sound_file_path,
+            ),
             duration_ms: None,
             reminder_id: Some(reminder.id.clone()),
         });
@@ -213,6 +213,36 @@ pub fn compute_tick(
             reminders_changed,
         },
     }
+}
+
+fn resolve_todo_sound_src(
+    sound_enabled: bool,
+    global_sound_file_path: &Option<String>,
+) -> Option<String> {
+    if !sound_enabled {
+        return None;
+    }
+    Some(
+        global_sound_file_path
+            .clone()
+            .unwrap_or_else(|| "default".to_string()),
+    )
+}
+
+fn resolve_health_sound_src(
+    sound_enabled: bool,
+    reminder_sound_file_path: Option<&String>,
+    global_sound_file_path: &Option<String>,
+) -> Option<String> {
+    if !sound_enabled {
+        return None;
+    }
+    Some(
+        reminder_sound_file_path
+            .cloned()
+            .or_else(|| global_sound_file_path.clone())
+            .unwrap_or_else(|| "default".to_string()),
+    )
 }
 
 /// 把 `HH:MM` 解释成"今天"的本地 DateTime；解析失败返回 None。
@@ -378,7 +408,7 @@ fn run_tick(app: &AppHandle, inner: &Arc<SchedulerInner>) {
     // ---- 1. 取数据快照 ----
     // `settings.todo.advanceReminderMinutes` 在 settings.json 上保留兼容，
     // 但本阶段调度器**不读取**——`TODO_ADVANCE_MINUTES` 写死 10 分钟。
-    let (today_todos, reminders) = {
+    let (today_todos, reminders, global_sound_file_path) = {
         let store = match state.todo_store.lock() {
             Ok(s) => s,
             Err(_) => return,
@@ -387,12 +417,26 @@ fn run_tick(app: &AppHandle, inner: &Arc<SchedulerInner>) {
             Ok(r) => r.clone(),
             Err(_) => return,
         };
+        let settings = match state.settings.lock() {
+            Ok(s) => s.clone(),
+            Err(_) => return,
+        };
         let today_todos = store.get(&today).cloned().unwrap_or_default();
-        (today_todos, reminders)
+        (
+            today_todos,
+            reminders,
+            settings.general.sound_file_path.clone(),
+        )
     };
 
     // ---- 2. 决策 ----
-    let plan = compute_tick(&today, &today_todos, &reminders, now);
+    let plan = compute_tick(
+        &today,
+        &today_todos,
+        &reminders,
+        now,
+        global_sound_file_path,
+    );
 
     // ---- 3. 把新事件推入 in-memory 队列 ----
     if !plan.outcome.events.is_empty() {
@@ -540,7 +584,7 @@ mod tests {
             .single()
             .unwrap();
         let todos = vec![todo_with("t1", "开会", Some("09:30"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert_eq!(plan.outcome.events.len(), 1);
         assert_eq!(plan.outcome.events[0].title, "即将开始：开会");
         assert!(plan.outcome.events[0].body.contains("10"));
@@ -558,7 +602,7 @@ mod tests {
             .single()
             .unwrap();
         let todos = vec![todo_with("t1", "开会", Some("09:30"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(
             plan.outcome.events.is_empty(),
             "到点应该不再弹窗，实际: {:?}",
@@ -577,7 +621,7 @@ mod tests {
             .single()
             .unwrap();
         let todos = vec![todo_with("t1", "开会", Some("09:30"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(plan.outcome.events.is_empty(), "任务时间已过不应补提醒");
         assert!(!plan.outcome.todos_changed);
     }
@@ -591,7 +635,7 @@ mod tests {
             .unwrap();
         let mut t = todo_with("t1", "开会", Some("09:30"));
         t.completed = true;
-        let plan = compute_tick("2026-06-17", &[t], &[], now);
+        let plan = compute_tick("2026-06-17", &[t], &[], now, None);
         assert!(plan.outcome.events.is_empty());
         assert!(!plan.outcome.todos_changed);
     }
@@ -609,10 +653,10 @@ mod tests {
             .unwrap();
         let todo = todo_with("t1", "开会", Some("09:30"));
         // 第一次 tick
-        let plan1 = compute_tick("2026-06-17", &[todo.clone()], &[], now_first);
+        let plan1 = compute_tick("2026-06-17", &[todo.clone()], &[], now_first, None);
         assert_eq!(plan1.outcome.events.len(), 1);
         // 第二次 tick（仍在 10 分钟窗口内）— 已 mark advanceRemindedAt，不应再弹
-        let plan2 = compute_tick("2026-06-17", &plan1.todos, &[], now_second);
+        let plan2 = compute_tick("2026-06-17", &plan1.todos, &[], now_second, None);
         assert!(
             plan2.outcome.events.is_empty(),
             "已 advance_reminded 的 todo 跨 tick 不应重复弹窗"
@@ -628,7 +672,7 @@ mod tests {
             .single()
             .unwrap();
         let todos = vec![todo_with("t1", "随便记一下", None)];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(plan.outcome.events.is_empty());
     }
 
@@ -641,7 +685,7 @@ mod tests {
             .unwrap();
         // reminderTime 11:00 → advance 窗口 10:50~11:00; 9:00 远在窗口之前
         let todos = vec![todo_with("t1", "晚点的事", Some("11:00"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(plan.outcome.events.is_empty());
     }
 
@@ -654,7 +698,7 @@ mod tests {
             .unwrap();
         // reminderTime 10:15 → advance 窗口 [10:05, 10:15); 10:15 是右边界
         let todos = vec![todo_with("t1", "五点吃饭", Some("10:15"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(plan.outcome.events.is_empty());
     }
 
@@ -666,7 +710,7 @@ mod tests {
     fn due_health_reminder_fires_and_reschedules() {
         let now = sample_now(); // 10:05
         let r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
-        let plan = compute_tick("2026-06-17", &[], &[r.clone()], now);
+        let plan = compute_tick("2026-06-17", &[], &[r.clone()], now, None);
         assert_eq!(plan.outcome.events.len(), 1);
         assert_eq!(plan.outcome.events[0].title, "定时喝水");
         assert!(plan.outcome.events[0].body.contains("30"));
@@ -683,7 +727,7 @@ mod tests {
         let now = sample_now();
         let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T09:00:00.000+08:00");
         r.enabled = false;
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick("2026-06-17", &[], &[r], now, None);
         assert!(plan.outcome.events.is_empty());
         assert!(!plan.outcome.reminders_changed);
     }
@@ -692,7 +736,7 @@ mod tests {
     fn health_reminder_not_yet_due_does_not_fire() {
         let now = sample_now();
         let r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:30:00.000+08:00");
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick("2026-06-17", &[], &[r], now, None);
         assert!(plan.outcome.events.is_empty());
     }
 
@@ -701,7 +745,7 @@ mod tests {
         let now = sample_now();
         let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
         r.next_trigger_at = Some("not-a-date".to_string());
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick("2026-06-17", &[], &[r], now, None);
         assert!(plan.outcome.events.is_empty());
         // 不掩盖损坏
         assert_eq!(
@@ -711,8 +755,60 @@ mod tests {
     }
 
     // =======================================================================
-    // 健康提醒 sound_src 三种语义
+    // todo / 健康提醒 sound_src 语义
     // =======================================================================
+
+    #[test]
+    fn todo_sound_enabled_without_global_path_emits_default() {
+        let now = Local
+            .with_ymd_and_hms(2026, 6, 17, 9, 20, 0)
+            .single()
+            .unwrap();
+        let todo = todo_with("t1", "开会", Some("09:30"));
+        let plan = compute_tick("2026-06-17", &[todo], &[], now, None);
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(plan.outcome.events[0].sound_src.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn todo_sound_enabled_with_global_path_emits_path() {
+        let now = Local
+            .with_ymd_and_hms(2026, 6, 17, 9, 20, 0)
+            .single()
+            .unwrap();
+        let todo = todo_with("t1", "开会", Some("09:30"));
+        let plan = compute_tick(
+            "2026-06-17",
+            &[todo],
+            &[],
+            now,
+            Some("C:/Users/me/sounds/ding.wav".to_string()),
+        );
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(
+            plan.outcome.events[0].sound_src.as_deref(),
+            Some("C:/Users/me/sounds/ding.wav")
+        );
+    }
+
+    #[test]
+    fn todo_sound_disabled_emits_no_sound_src() {
+        let now = Local
+            .with_ymd_and_hms(2026, 6, 17, 9, 20, 0)
+            .single()
+            .unwrap();
+        let mut todo = todo_with("t1", "开会", Some("09:30"));
+        todo.sound_enabled = false;
+        let plan = compute_tick(
+            "2026-06-17",
+            &[todo],
+            &[],
+            now,
+            Some("C:/Users/me/sounds/ding.wav".to_string()),
+        );
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(plan.outcome.events[0].sound_src, None);
+    }
     //
     // 业务规则（与本阶段产品决议一致）：
     //   * `sound_enabled = false`                       → `sound_src = None`  （静音）
@@ -731,7 +827,7 @@ mod tests {
         r.sound_enabled = false;
         // 即使给了自定义路径，关闭声音时也忽略
         r.sound_file_path = Some("C:/x/custom.wav".to_string());
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick("2026-06-17", &[], &[r], now, None);
         assert_eq!(plan.outcome.events.len(), 1);
         assert_eq!(plan.outcome.events[0].sound_src, None);
     }
@@ -742,9 +838,29 @@ mod tests {
         let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
         r.sound_enabled = true;
         r.sound_file_path = None;
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick("2026-06-17", &[], &[r], now, None);
         assert_eq!(plan.outcome.events.len(), 1);
         assert_eq!(plan.outcome.events[0].sound_src.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn health_reminder_without_own_path_uses_global_sound_path() {
+        let now = sample_now();
+        let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
+        r.sound_enabled = true;
+        r.sound_file_path = None;
+        let plan = compute_tick(
+            "2026-06-17",
+            &[],
+            &[r],
+            now,
+            Some("C:/Users/me/sounds/global.wav".to_string()),
+        );
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(
+            plan.outcome.events[0].sound_src.as_deref(),
+            Some("C:/Users/me/sounds/global.wav")
+        );
     }
 
     #[test]
@@ -753,7 +869,13 @@ mod tests {
         let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
         r.sound_enabled = true;
         r.sound_file_path = Some("C:/Users/me/sounds/water.mp3".to_string());
-        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        let plan = compute_tick(
+            "2026-06-17",
+            &[],
+            &[r],
+            now,
+            Some("C:/Users/me/sounds/global.wav".to_string()),
+        );
         assert_eq!(plan.outcome.events.len(), 1);
         assert_eq!(
             plan.outcome.events[0].sound_src.as_deref(),
@@ -777,7 +899,7 @@ mod tests {
         let todo = todo_with("t1", "提前任务", Some("09:30"));
         let health = health_reminder("water", "定时喝水", 30, "2026-06-17T09:00:00.000+08:00");
 
-        let plan = compute_tick("2026-06-17", &[todo], &[health], now);
+        let plan = compute_tick("2026-06-17", &[todo], &[health], now, None);
 
         assert_eq!(plan.outcome.events.len(), 2);
         assert!(plan.outcome.events[0].title.contains("提前任务"));
@@ -793,7 +915,7 @@ mod tests {
         // 已过时间的 todo 不会再弹窗（产品决议）—— 这是新行为。
         let now = sample_now(); // 10:05
         let todos = vec![todo_with("t1", "十点任务", Some("10:00"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert!(
             plan.outcome.events.is_empty(),
             "到点之后不再弹窗（无论传入哪个 bucket）"
@@ -812,7 +934,7 @@ mod tests {
             todo_with("b", "B", Some("09:26")),
             todo_with("c", "C", Some("09:27")),
         ];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert_eq!(plan.outcome.events.len(), 3);
         assert!(plan.outcome.events[0].title.contains("A"));
         assert!(plan.outcome.events[1].title.contains("B"));
@@ -838,13 +960,13 @@ mod tests {
             .single()
             .unwrap();
         let todo = todo_with("t1", "吃饭", Some("10:15"));
-        let plan1 = compute_tick("2026-06-17", &[todo], &[], now_first);
+        let plan1 = compute_tick("2026-06-17", &[todo], &[], now_first, None);
         assert_eq!(plan1.outcome.events.len(), 1);
         // 窗口内再 tick
-        let plan2 = compute_tick("2026-06-17", &plan1.todos, &[], now_mid);
+        let plan2 = compute_tick("2026-06-17", &plan1.todos, &[], now_mid, None);
         assert!(plan2.outcome.events.is_empty());
         // 到点 tick
-        let plan3 = compute_tick("2026-06-17", &plan1.todos, &[], now_due);
+        let plan3 = compute_tick("2026-06-17", &plan1.todos, &[], now_due, None);
         assert!(
             plan3.outcome.events.is_empty(),
             "到点不应再补 due 弹窗（产品决议）"
@@ -864,7 +986,7 @@ mod tests {
             .unwrap();
         // reminderTime=09:30 → 提前 10min 窗口起点 09:20，now 正好在起点上
         let todos = vec![todo_with("t1", "任务", Some("09:30"))];
-        let plan = compute_tick("2026-06-17", &todos, &[], now);
+        let plan = compute_tick("2026-06-17", &todos, &[], now, None);
         assert_eq!(plan.outcome.events.len(), 1);
         assert!(plan.outcome.events[0].body.contains("10 分钟"));
     }

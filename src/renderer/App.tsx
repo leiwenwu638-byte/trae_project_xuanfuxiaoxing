@@ -143,10 +143,12 @@ export function App() {
   // `updateSettings` 只返回 `AppSettings`。所以"换音源"时必须**保留**
   // 现有 snapshot 的列表数据，只把 `settings` 字段替换。
   function applySettingsToSnapshot(nextSettings: AppSettings) {
-    if (state.kind !== 'ready') return;
-    setState({
-      kind: 'ready',
-      snapshot: { ...state.snapshot, settings: nextSettings }
+    setState((prev) => {
+      if (prev.kind !== 'ready') return prev;
+      return {
+        kind: 'ready',
+        snapshot: { ...prev.snapshot, settings: nextSettings }
+      };
     });
   }
 
@@ -163,8 +165,7 @@ export function App() {
         reportOperationError('保存提示音失败', error);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.kind]
+    []
   );
 
   const handleResetSound = useCallback(async () => {
@@ -176,8 +177,7 @@ export function App() {
     } catch (error) {
       reportOperationError('恢复默认提示音失败', error);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.kind]);
+  }, []);
 
   useEffect(() => {
     if (view !== 'health') return;

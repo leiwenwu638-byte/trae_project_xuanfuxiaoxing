@@ -45,16 +45,17 @@ export function ReminderPopup({ icon, title, body, soundSrc, onClose }: Reminder
     if (!resolvedSound) return;
     const audio = audioRef.current;
     if (!audio) return;
-    // 主动调用 play()，并在 WebView 自动播放策略拦截 / 音频解码失败时
-    // 给出可观察的日志。React StrictMode 下 effect 会跑两次，所以把
-    // play() 包在 if 守卫里：src 一致就跳过一次。
-    const playPromise = audio.play();
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise.catch((error: unknown) => {
-        // eslint-disable-next-line no-console
-        console.warn('[ReminderPopup] audio play failed:', error);
-      });
-    }
+    const timer = window.setTimeout(() => {
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch((error: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('[ReminderPopup] audio play failed:', error);
+        });
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
   }, [resolvedSound]);
 
   function close() {
@@ -70,7 +71,7 @@ export function ReminderPopup({ icon, title, body, soundSrc, onClose }: Reminder
       className="popup-root reminder-popup-enter flex h-full w-full gap-3 overflow-hidden rounded-lg bg-white p-3 text-[13px] text-assistant-ink shadow-utility"
     >
       {resolvedSound ? (
-        <audio ref={audioRef} autoPlay src={resolvedSound} data-testid="reminder-popup-audio" />
+        <audio ref={audioRef} src={resolvedSound} data-testid="reminder-popup-audio" />
       ) : null}
       <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-assistant-wash text-[20px]">
         {icon}

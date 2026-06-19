@@ -62,10 +62,15 @@ npm run tauri:dev
 > ⚠️ 首次启动 `npm run tauri:dev` 时 Tauri 会冷编译 Rust 依赖（chrono /
 > tauri / uuid ...），控制台会卡在 `Compiling` 数分钟，**这是预期行为**；
 > 后续 `tauri dev` 会复用 `src-tauri/target` 缓存（可通过
-> `CARGO_TARGET_DIR` 改路径），启动会快很多。实际"打开窗口后页面加载慢"
+> `CARGO_TARGET_DIR` 改路径），启动会快很多；不要手动删除 `src-tauri/target`，
+> 否则下次会重新冷编译 Rust 依赖。实际"打开窗口后页面加载慢"
 > 还是 Rust 编译慢，可开启 DevTools Console 看前端 `console.info('[App] getSnapshot total=...ms')`
 > ——这条日志只在 `>= 50ms` 时打印，是 Rust 读盘 + IPC + setState 的总耗时，
 > 正常 < 50ms（不打印）。
+>
+> 开发时建议保持 `npm run tauri:dev` 进程运行；只改前端 React / CSS 时，Vite HMR
+> 会直接热更新页面，不需要重启 Tauri。只有修改 Rust 代码或 Tauri 配置后，才需要等待
+> Rust 重新编译。
 
 ## 前端检查
 

@@ -40,7 +40,6 @@ describe('ReminderPopup', () => {
 
     const audio = container.querySelector('audio');
     expect(audio).toHaveAttribute('src', '/sound-default.wav');
-    expect(audio).toHaveAttribute('autoplay');
   });
 
   it('passes http(s) / data / blob / absolute paths through unchanged', () => {
@@ -87,7 +86,27 @@ describe('ReminderPopup', () => {
     expect(c2.querySelector('audio')).toBeNull();
   });
 
+  it('waits briefly before playing audio so the popup window can become visible', () => {
+    vi.useFakeTimers();
+    const originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve());
+
+    render(
+      <ReminderPopup body="活动一下" icon="💧" soundSrc="default" title="定时喝水" onClose={vi.fn()} />
+    );
+
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(150);
+
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+
+    HTMLMediaElement.prototype.play = originalPlay;
+    vi.useRealTimers();
+  });
+
   it('logs a warning when audio.play() rejects', async () => {
+    vi.useFakeTimers();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     // 真实 audio.play 在 jsdom 下不会真正调用；这里手工在原型上替换。
     const originalPlay = HTMLMediaElement.prototype.play;
@@ -97,11 +116,13 @@ describe('ReminderPopup', () => {
     render(
       <ReminderPopup body="活动一下" icon="💧" soundSrc="default" title="定时喝水" onClose={vi.fn()} />
     );
+    vi.advanceTimersByTime(150);
     // 等 microtask flush
     await Promise.resolve();
     await Promise.resolve();
     expect(warnSpy).toHaveBeenCalledWith('[ReminderPopup] audio play failed:', playError);
 
     HTMLMediaElement.prototype.play = originalPlay;
+    vi.useRealTimers();
   });
 });

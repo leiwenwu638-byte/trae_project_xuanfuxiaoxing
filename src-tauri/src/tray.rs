@@ -99,15 +99,14 @@ pub fn match_menu_id(id: &str) -> Option<MenuAction> {
 /// 与真实提醒弹窗共用 [`window_manager::show_popup`] 入口，
 /// 不走调度器、不持久化状态——纯调试用。
 ///
-/// `sound_src = Some("default")` 是关键：前端 `ReminderPopup` 看到该
-/// 字面量会映射到 `public/sound-default.wav`。如果这里仍然为 `None`，
-/// 托盘点击"显示提醒测试"时弹窗就会哑火。
-pub fn build_test_popup_payload() -> ReminderPopupPayload {
+/// 调用方传入当前应测试的 sound_src：全局自定义路径优先，缺失时传
+/// `Some("default")`，让前端 `ReminderPopup` 映射到 `public/sound-default.wav`。
+pub fn build_test_popup_payload(sound_src: Option<String>) -> ReminderPopupPayload {
     ReminderPopupPayload {
         title: "测试提醒".to_string(),
         body: "这是一条来自托盘菜单的测试弹窗，用来验证 reminder-popup 链路。".to_string(),
         icon: Some("🛎️".to_string()),
-        sound_src: Some("default".to_string()),
+        sound_src,
         duration_ms: None,
         reminder_id: None,
     }
@@ -144,7 +143,14 @@ pub fn dispatch_action(app: &AppHandle, action: MenuAction) -> tauri::Result<()>
         }
         MenuAction::ShowTestPopup => {
             // 复用第五阶段 + 第六阶段的 show_popup：走 replace_window 注入 payload。
-            let payload = build_test_popup_payload();
+            let sound_src = app
+                .state::<crate::state::AppState>()
+                .settings
+                .lock()
+                .ok()
+                .and_then(|settings| settings.general.sound_file_path.clone())
+                .or_else(|| Some("default".to_string()));
+            let payload = build_test_popup_payload(sound_src);
             window_manager::show_popup(app, &payload)
         }
         MenuAction::Quit => {
@@ -305,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_popup_payload_has_fixed_title_and_body() {
-        let payload = build_test_popup_payload();
+        let payload = build_test_popup_payload(Some("default".to_string()));
         assert_eq!(payload.title, "测试提醒");
         assert!(!payload.body.is_empty());
         // 写一个可断言的最小子串，避免以后改文案破坏契约
@@ -314,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_popup_payload_uses_alarm_icon() {
-        let payload = build_test_popup_payload();
+        let payload = build_test_popup_payload(Some("default".to_string()));
         // 用 emoji 提示音图标，与真实提醒弹窗的 🔔 区分
         assert_eq!(payload.icon.as_deref(), Some("🛎️"));
     }
@@ -323,14 +329,23 @@ mod tests {
     fn test_popup_payload_uses_default_sound() {
         // 托盘"显示提醒测试"必须能播声音；`Some("default")` 是前端
         // `ReminderPopup` 用来映射到 `/sound-default.wav` 的关键字面量。
-        let payload = build_test_popup_payload();
+        let payload = build_test_popup_payload(Some("default".to_string()));
         assert_eq!(payload.sound_src.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn test_popup_payload_uses_custom_sound_when_provided() {
+        let payload = build_test_popup_payload(Some("C:/Users/me/sounds/ding.wav".to_string()));
+        assert_eq!(
+            payload.sound_src.as_deref(),
+            Some("C:/Users/me/sounds/ding.wav")
+        );
     }
 
     #[test]
     fn test_popup_payload_is_detached_from_scheduler() {
         // 测试弹窗不应带 reminderId（与真实调度器触发的弹窗区分开）
-        let payload = build_test_popup_payload();
+        let payload = build_test_popup_payload(Some("default".to_string()));
         assert!(payload.reminder_id.is_none());
     }
 

@@ -452,8 +452,8 @@ pub const ALLOWED_SOUND_EXTENSIONS: &[&str] = &["wav", "mp3", "ogg"];
 /// 规则：
 ///   * 取 `Path::new(&file_name).file_name()`，丢弃任何目录成分（防路径穿越）；
 ///   * basename 内的非 ASCII 字母数字 / `.` / `-` / `_` 字符全部替换为 `_`；
-///   * 扩展名必须在 `ALLOWED_SOUND_EXTENSIONS` 之内（大小写不敏感），缺失时
-///     按 `.wav` 兜底；
+///   * 扩展名必须在 `ALLOWED_SOUND_EXTENSIONS` 之内（大小写不敏感），缺失或
+///     不支持时直接返回错误；
 ///   * 全部失败（含 basename 为空 / 没有合法扩展名）时返回 `Err(String)`。
 pub(crate) fn sanitize_sound_filename(file_name: &str) -> CmdResult<String> {
     if file_name.trim().is_empty() {
@@ -481,17 +481,17 @@ pub(crate) fn sanitize_sound_filename(file_name: &str) -> CmdResult<String> {
     if safe_stem.is_empty() {
         return err("清洗后文件名为空");
     }
-    let lower = safe_stem.to_ascii_lowercase();
-    let resolved_ext = ALLOWED_SOUND_EXTENSIONS
+    let extension = std::path::Path::new(&safe_stem)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .ok_or_else(|| "提示音文件必须带有 wav / mp3 / ogg 扩展名".to_string())?;
+    if !ALLOWED_SOUND_EXTENSIONS
         .iter()
-        .find(|ext| lower.ends_with(&format!(".{ext}")))
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "wav".to_string());
-    let stem_only = safe_stem
-        .strip_suffix(&format!(".{resolved_ext}"))
-        .unwrap_or(&safe_stem)
-        .to_string();
-    Ok(format!("{stem_only}.{resolved_ext}"))
+        .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+    {
+        return err("仅支持 wav / mp3 / ogg 提示音文件");
+    }
+    Ok(safe_stem)
 }
 
 /// 保存自定义提示音到 `<app_data_dir>/sounds/`，返回最终绝对路径。
@@ -1250,11 +1250,7 @@ mod tests {
 
     #[test]
     fn sanitize_sound_filename_normalizes_extension_case() {
-        // 大写扩展名归一为小写：函数用 `strip_suffix(".wav")` 严格匹配
-        // 保留 stem 大小写，但最终扩展名始终小写。
-        // 这里 `DING.WAV` 的 stem 是 `DING.WAV`（strip 大小写不匹配 → 不剥），
-        // resolved_ext 是 `wav`，所以最终拼成 `DING.WAV.wav`。
-        assert_eq!(sanitize_sound_filename("DING.WAV").unwrap(), "DING.WAV.wav");
+        assert_eq!(sanitize_sound_filename("DING.WAV").unwrap(), "DING.WAV");
     }
 
     #[test]
@@ -1281,9 +1277,8 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_sound_filename_defaults_to_wav_when_no_extension() {
-        // 没有扩展名时按 .wav 兜底
-        assert_eq!(sanitize_sound_filename("noext").unwrap(), "noext.wav");
+    fn sanitize_sound_filename_rejects_missing_extension() {
+        assert!(sanitize_sound_filename("noext").is_err());
     }
 
     #[test]
@@ -1293,16 +1288,8 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_sound_filename_appends_wav_when_extension_unsupported() {
-        // 扩展名不在 wav/mp3/ogg 之内时按 .wav 兜底，**追加**而非替换：
-        // 当前实现 `strip_suffix(".wav")` 在 `song.flac` 上大小写不匹配
-        // 失败，stem 仍为 `song.flac`，最终拼成 `song.flac.wav`。
-        // 兜底策略：宁可拼成合法 `.wav` 文件名（WebView 一定可播），
-        // 也不强行覆盖用户原扩展名（避免数据丢失）。
-        assert_eq!(
-            sanitize_sound_filename("song.flac").unwrap(),
-            "song.flac.wav"
-        );
+    fn sanitize_sound_filename_rejects_unsupported_extension() {
+        assert!(sanitize_sound_filename("song.flac").is_err());
     }
 
     // ---- settings 兼容：soundFilePath 缺失时默认 None ----

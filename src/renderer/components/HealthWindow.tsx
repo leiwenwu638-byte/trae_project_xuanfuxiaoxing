@@ -40,8 +40,8 @@ type HealthWindowProps = {
  *     不再使用 `h-[520px] w-[380px]` 像素内框。
  *   - 滚动区独立可滚：`flex flex-col overflow-hidden` 外层 + `flex-none` 头部 +
  *     `min-h-0 flex-1 overflow-y-auto` 列表容器，10+ 条提醒不会撑出窗口。
- *   - 单条删除入口（编辑 / 暂停 / 删除），删除走 `window.confirm` 二次确认，
- *     防止误触，命中后走 `onDelete` → `desktopApi.reminder.deleteReminder` →
+ *   - 单条删除入口（编辑 / 暂停 / 删除），点击后直接走 `onDelete` →
+ *     `desktopApi.reminder.deleteReminder` →
  *     Tauri 端 `reminders.retain(...)` 落盘 `reminders.json`。
  */
 export function HealthWindow({
@@ -174,30 +174,13 @@ export function HealthWindow({
     }
   }
 
-  /**
-   * 删除一条提醒（带确认）。
-   *
-   * 轻量确认策略：用 `window.confirm`，文案"确定删除该健康提醒吗？"。
-   *   - 确认 → 调 `onDelete(reminder.id)`，后端删 → 广播 snapshot →
-   *     `App` 收到后整页重新渲染，该提醒从列表消失。
-   *   - 取消 → 什么都不做（无副作用）。
-   *   - 失败 → `App` 那边 `setSnapshotSafe(...).catch(console.error)` 把
-   *     错误打到 console，不静默。
-   *
-   * **不**复用 `ReminderPopup`（提示用户"任务开始"的浮窗，语义不对）；
-   * **不**引入弹窗库（轻量、避免依赖膨胀）。
-   */
-  function confirmDelete(reminder: HealthReminder) {
-    // 关闭编辑态，避免删除后还停留在一个不存在的 id 上。
+  function deleteReminder(reminder: HealthReminder) {
     if (editingId === reminder.id) {
       setEditingId(null);
     }
-    const ok = window.confirm(`确定删除该健康提醒吗？\n\n名称：${reminder.name}`);
-    if (!ok) return;
     try {
       onDelete(reminder.id);
     } catch (error) {
-      // 同步抛错（mock adapter 在 dev 模式偶发）时不要让 React 整页崩。
       console.warn('[HealthWindow] delete reminder failed:', error);
     }
   }
@@ -388,7 +371,7 @@ export function HealthWindow({
                       icon={<Trash2 size={11} />}
                       ariaLabel={`删除：${reminder.name}`}
                       data-testid={`delete-reminder-${reminder.id}`}
-                      onClick={() => confirmDelete(reminder)}
+                      onClick={() => deleteReminder(reminder)}
                     >
                       删除
                     </ActionButton>

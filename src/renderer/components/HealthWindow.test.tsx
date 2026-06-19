@@ -35,8 +35,6 @@ function buildProps(overrides: Partial<React.ComponentProps<typeof HealthWindow>
 
 describe('HealthWindow', () => {
   beforeEach(() => {
-    // 清理上一测试残留的 `window.confirm` / `console.warn` spy，
-    // 否则新测试用 `expect(confirmSpy).toHaveBeenCalledTimes(1)` 会失败。
     vi.restoreAllMocks();
   });
 
@@ -71,37 +69,22 @@ describe('HealthWindow', () => {
     expect(btn).toHaveTextContent('删除');
   });
 
-  it('calls onDelete only after the user confirms the prompt', () => {
+  it('deletes directly without using the browser confirm prompt', () => {
     const onDelete = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm');
 
     render(<HealthWindow {...buildProps({ onDelete })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '删除：定时喝水' }));
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(confirmSpy.mock.calls[0][0]).toContain('确定删除该健康提醒吗');
-    expect(confirmSpy.mock.calls[0][0]).toContain('定时喝水');
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(onDelete).toHaveBeenCalledWith('water');
-  });
-
-  it('does not call onDelete when the user cancels the prompt', () => {
-    const onDelete = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    render(<HealthWindow {...buildProps({ onDelete })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '删除：定时喝水' }));
-
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it('logs and swallows a synchronous throw from onDelete', () => {
     const onDelete = vi.fn(() => {
       throw new Error('synthetic failure');
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     render(<HealthWindow {...buildProps({ onDelete })} />);
@@ -122,7 +105,6 @@ describe('HealthWindow', () => {
 
   it('closes the edit form when deleting the reminder being edited', () => {
     const onDelete = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(<HealthWindow {...buildProps({ onDelete })} />);
 

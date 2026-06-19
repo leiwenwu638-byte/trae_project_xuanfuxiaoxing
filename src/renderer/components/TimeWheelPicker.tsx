@@ -302,6 +302,10 @@ type WheelColumnProps = {
 function WheelColumn({ label, testIdPrefix, values, selected, onSelect }: WheelColumnProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
+  function wrapIndex(index: number): number {
+    return (index + values.length) % values.length;
+  }
+
   // 鼠标滚轮：preventDefault 后基于当前 selected 上下切换一项
   useEffect(() => {
     const el = viewportRef.current;
@@ -311,8 +315,8 @@ function WheelColumn({ label, testIdPrefix, values, selected, onSelect }: WheelC
       const currentIndex = values.indexOf(selected);
       if (currentIndex < 0) return;
       const step = event.deltaY > 0 ? 1 : -1;
-      const nextIndex = Math.max(0, Math.min(values.length - 1, currentIndex + step));
-      if (nextIndex !== currentIndex) onSelect(values[nextIndex]);
+      const nextIndex = wrapIndex(currentIndex + step);
+      onSelect(values[nextIndex]);
     }
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -324,10 +328,10 @@ function WheelColumn({ label, testIdPrefix, values, selected, onSelect }: WheelC
     if (currentIndex < 0) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
       event.preventDefault();
-      onSelect(values[Math.min(values.length - 1, currentIndex + 1)]);
+      onSelect(values[wrapIndex(currentIndex + 1)]);
     } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
       event.preventDefault();
-      onSelect(values[Math.max(0, currentIndex - 1)]);
+      onSelect(values[wrapIndex(currentIndex - 1)]);
     } else if (event.key === 'Home') {
       event.preventDefault();
       onSelect(values[0]);
@@ -338,13 +342,23 @@ function WheelColumn({ label, testIdPrefix, values, selected, onSelect }: WheelC
   }
 
   const selectedIndex = Math.max(0, values.indexOf(selected));
-  // 视口顶部 = PADDING_ITEMS * ITEM_HEIGHT（72px），让 selected 出现在视口中间。
-  const offset = -selectedIndex * ITEM_HEIGHT + PADDING_ITEMS * ITEM_HEIGHT;
+  const repeatedValues = [values, values, values].flatMap((copyValues, copyIndex) =>
+    copyValues.map((value, valueIndex) => ({
+      copyIndex,
+      value,
+      valueIndex,
+      key: `${copyIndex}-${value}`
+    }))
+  );
+  const centeredSelectedIndex = values.length + selectedIndex;
+  // 列表前面已经有 PADDING_ITEMS 个 padding item；选中项只需要按真实列表索引上移。
+  const offset = -centeredSelectedIndex * ITEM_HEIGHT;
 
   return (
     <div className="flex-1" role="group" aria-label={label}>
       <div
         ref={viewportRef}
+        data-testid={`${testIdPrefix}-viewport`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         className="time-wheel-viewport relative overflow-hidden focus:outline-none focus:ring-0"
@@ -357,24 +371,26 @@ function WheelColumn({ label, testIdPrefix, values, selected, onSelect }: WheelC
           style={{ top: PADDING_ITEMS * ITEM_HEIGHT, height: ITEM_HEIGHT }}
         />
         <ul
+          data-testid={`${testIdPrefix}-list`}
           className="time-wheel-list transition-transform duration-200 ease-out"
           style={{ transform: `translateY(${offset}px)` }}
         >
           {Array.from({ length: PADDING_ITEMS }).map((_, index) => (
             <li key={`pad-top-${label}-${index}`} className="time-wheel-item" aria-hidden />
           ))}
-          {values.map((value) => {
-            const isSelected = value === selected;
+          {repeatedValues.map(({ copyIndex, key, value, valueIndex }) => {
+            const isSelected = copyIndex === 1 && value === selected;
             return (
-              <li key={`${label}-${value}`} className="time-wheel-item">
+              <li key={`${label}-${key}`} className="time-wheel-item">
                 <button
                   type="button"
-                  data-testid={`${testIdPrefix}-${value}`}
+                  data-testid={copyIndex === 1 ? `${testIdPrefix}-${value}` : undefined}
                   aria-label={`${label} ${value}`}
                   aria-pressed={isSelected}
                   onClick={() => onSelect(value)}
+                  tabIndex={copyIndex === 1 ? 0 : -1}
                   className={`flex h-full w-full items-center justify-center text-[15px] transition ${
-                    isSelected
+                    valueIndex === selectedIndex
                       ? 'font-semibold text-assistant-ink'
                       : 'text-assistant-muted/55 hover:text-assistant-ink'
                   }`}
