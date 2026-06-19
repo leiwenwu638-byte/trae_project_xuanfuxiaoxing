@@ -9,7 +9,11 @@ export function createDefaultSettings(): AppSettings {
       ballOpacity: 0.7,
       ballSize: 'medium',
       rememberPosition: true,
-      soundEnabled: true
+      soundEnabled: true,
+      // 自定义提示音文件路径：null = 走内置默认（`public/sound-default.wav`）。
+      // 老 settings.json 没有此字段时由 Tauri 端 `#[serde(default)]` 给 None，
+      // 前端 `createDefaultSettings` 与之保持一致——保证双端默认值对得上。
+      soundFilePath: null
     },
     todo: {
       advanceReminderMinutes: 10

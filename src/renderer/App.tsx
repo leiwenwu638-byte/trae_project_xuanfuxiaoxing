@@ -1,6 +1,12 @@
 import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AddTodoInput, AppSnapshot, Todo, UpdateTodoInput } from '../shared/types';
+import type {
+  AddTodoInput,
+  AppSettings,
+  AppSnapshot,
+  Todo,
+  UpdateTodoInput
+} from '../shared/types';
 import { TODO_PRIORITY_DEFAULT } from '../shared/types';
 import { HealthWindow } from './components/HealthWindow';
 import { ReminderPopup } from './components/ReminderPopup';
@@ -52,9 +58,22 @@ export function App() {
 
   const loadSnapshot = useCallback(async () => {
     setState({ kind: 'loading' });
+    // 启动耗时诊断：分别记录"开始 → 拿到 snapshot"和"setState 完成"
+    // 两个时间点，便于判断慢在 IPC 还是 React 重渲染。
+    const t0 = performance.now();
     try {
       const snapshot = await desktopApi.getSnapshot();
+      const t1 = performance.now();
       setState({ kind: 'ready', snapshot });
+      const t2 = performance.now();
+      // 50ms 以上才打噪音更小；启动期"卡顿阈值"留给用户
+      const total = Math.round(t2 - t0);
+      if (total >= 50) {
+        // eslint-disable-next-line no-console
+        console.info(
+          `[App] getSnapshot total=${total}ms (ipc=${Math.round(t1 - t0)}ms, setState=${Math.round(t2 - t1)}ms, todos=${snapshot.todos.length}, reminders=${snapshot.reminders.length})`
+        );
+      }
     } catch (error) {
       console.error('[App] getSnapshot failed:', error);
       const message = error instanceof Error ? error.message : String(error);
@@ -103,6 +122,62 @@ export function App() {
     const timer = window.setTimeout(() => setOperationError(null), 5000);
     return () => window.clearTimeout(timer);
   }, [operationError]);
+
+  // ---------------------------------------------------------------------------
+  // 全局提示音设置（今日计划 / 健康节律共用）
+  // ---------------------------------------------------------------------------
+  //
+  // 流程：
+  //   1. 前端用 `<input type="file">` 拿到 File；
+  //   2. `File.arrayBuffer()` → `Uint8Array`；
+  //   3. `desktopApi.settings.saveCustomSound(name, bytes)` → Rust 写到
+  //      `<app_data_dir>/sounds/<safe_name>`，返回真实绝对路径；
+  //   4. `desktopApi.settings.updateSettings({ general: { soundFilePath } })`
+  //      把路径写进 settings.json；
+  //   5. `setSnapshotSafe` 触发 React 重渲染，UI 立即显示"自定义"。
+  //
+  // "恢复默认" 只调 `updateSettings({ general: { soundFilePath: null } })`，
+  // 不删磁盘文件（防止用户误操作"恢复默认"后音频文件丢失）。
+  //
+  // 注意：`setSnapshotSafe` 接受的是 `AppSnapshot`（含 today / todos / reminders），
+  // `updateSettings` 只返回 `AppSettings`。所以"换音源"时必须**保留**
+  // 现有 snapshot 的列表数据，只把 `settings` 字段替换。
+  function applySettingsToSnapshot(nextSettings: AppSettings) {
+    if (state.kind !== 'ready') return;
+    setState({
+      kind: 'ready',
+      snapshot: { ...state.snapshot, settings: nextSettings }
+    });
+  }
+
+  const handleSelectSound = useCallback(
+    async (file: File) => {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const savedPath = await desktopApi.settings.saveCustomSound(file.name, bytes);
+        const next = await desktopApi.settings.updateSettings({
+          general: { soundFilePath: savedPath }
+        });
+        applySettingsToSnapshot(next);
+      } catch (error) {
+        reportOperationError('保存提示音失败', error);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.kind]
+  );
+
+  const handleResetSound = useCallback(async () => {
+    try {
+      const next = await desktopApi.settings.updateSettings({
+        general: { soundFilePath: null }
+      });
+      applySettingsToSnapshot(next);
+    } catch (error) {
+      reportOperationError('恢复默认提示音失败', error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.kind]);
 
   useEffect(() => {
     if (view !== 'health') return;
@@ -168,6 +243,9 @@ export function App() {
           <HealthWindow
             reminders={snapshot.reminders}
             now={now}
+            soundFilePath={snapshot.settings.general.soundFilePath}
+            onResetSound={() => void handleResetSound()}
+            onSelectSound={(file) => void handleSelectSound(file)}
             onToggle={(id) =>
               void desktopApi.reminder
                 .toggleReminder(id)
@@ -206,6 +284,9 @@ export function App() {
         <TodoPanel
           dateLabel={dateLabel}
           todos={todos}
+          soundFilePath={snapshot.settings.general.soundFilePath}
+          onResetSound={() => void handleResetSound()}
+          onSelectSound={(file) => void handleSelectSound(file)}
           onAdd={(input: AddTodoInput) =>
             void desktopApi.todo
               .addTodo(input)

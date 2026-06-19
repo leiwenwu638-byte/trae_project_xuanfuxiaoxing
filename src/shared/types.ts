@@ -58,6 +58,17 @@ export type AddHealthReminderInput = {
   name: string;
   intervalMinutes: number;
   message: string;
+  /**
+   * 用户是否启用"提示音"。本字段在上一阶段被 `soundFilePath` 隐含：
+   *   * `soundFilePath != null` ⇒ 视为打开声音
+   *   * `soundFilePath == null` ⇒ 视为静音
+   * 这导致"声音开关打开但用默认音"也会被错误地静音。
+   * 拆开后：
+   *   * `soundEnabled = false` → scheduler 不传 sound_src（静音）
+   *   * `soundEnabled = true && soundFilePath = null` → scheduler 走 `default`
+   *   * `soundEnabled = true && soundFilePath = "C:/..."` → 自定义音频
+   */
+  soundEnabled: boolean;
   soundFilePath: string | null;
 };
 
@@ -81,6 +92,19 @@ export type AppSettings = {
     /** @deprecated 悬浮球遗留字段，详见 GeneralSettings.ballOpacity。 */
     rememberPosition: boolean;
     soundEnabled: boolean;
+    /**
+     * 自定义提示音文件路径（绝对路径，已复制到 `app_data_dir/sounds/`）。
+     *
+     * 语义：
+     *   * `null` → 走内置默认提示音 `public/sound-default.wav`；
+     *   * 非空 → 走该本地音频文件。
+     *
+     * 今日计划 / 健康节律**共用**本设置（与单条 reminder 的
+     * `soundFilePath` 不同——本字段是全局默认）。前端读取老 settings.json
+     * 缺失本字段时由 `createDefaultAppSettings()` 兜底为 `null`，
+     * 不破坏向后兼容。
+     */
+    soundFilePath: string | null;
   };
   todo: {
     advanceReminderMinutes: number;

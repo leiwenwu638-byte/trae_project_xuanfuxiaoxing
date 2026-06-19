@@ -24,7 +24,9 @@ describe('defaults', () => {
         ballOpacity: 0.7,
         ballSize: 'medium',
         rememberPosition: true,
-        soundEnabled: true
+        soundEnabled: true,
+        // 全局自定义提示音文件路径：null = 走内置默认音 `public/sound-default.wav`。
+        soundFilePath: null
       },
       todo: {
         advanceReminderMinutes: 10

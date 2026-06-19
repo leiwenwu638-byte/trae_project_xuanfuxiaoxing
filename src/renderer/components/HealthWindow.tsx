@@ -8,6 +8,7 @@ import {
 import { calculateReminderProgress } from '../../shared/reminderService';
 import type { AddHealthReminderInput, HealthReminder, UpdateHealthReminderInput } from '../../shared/types';
 import { ActionButton } from './common/ActionButton';
+import { SoundSettingsBar } from './SoundSettingsBar';
 
 type HealthWindowProps = {
   reminders: HealthReminder[];
@@ -16,6 +17,12 @@ type HealthWindowProps = {
   onAdd: (input: AddHealthReminderInput) => void;
   onUpdate: (id: string, input: UpdateHealthReminderInput) => void;
   onDelete: (id: string) => void;
+  /** 全局提示音设置（今日计划 / 健康节律共用）。 */
+  soundFilePath: string | null;
+  /** 用户选了新提示音文件。父组件负责写盘 + 写 settings。 */
+  onSelectSound: (file: File) => void;
+  /** 用户点了"恢复默认"。父组件负责把 settings.general.soundFilePath 写回 null。 */
+  onResetSound: () => void;
 };
 
 /**
@@ -37,7 +44,17 @@ type HealthWindowProps = {
  *     防止误触，命中后走 `onDelete` → `desktopApi.reminder.deleteReminder` →
  *     Tauri 端 `reminders.retain(...)` 落盘 `reminders.json`。
  */
-export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDelete }: HealthWindowProps) {
+export function HealthWindow({
+  reminders,
+  now,
+  onToggle,
+  onAdd,
+  onUpdate,
+  onDelete,
+  soundFilePath,
+  onSelectSound,
+  onResetSound
+}: HealthWindowProps) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [intervalMinutes, setIntervalMinutes] = useState('30');
@@ -77,7 +94,13 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
       return;
     }
 
-    onAdd({ name: trimmedName, intervalMinutes: interval, message: trimmedMessage, soundFilePath: null });
+    onAdd({
+      name: trimmedName,
+      intervalMinutes: interval,
+      message: trimmedMessage,
+      soundEnabled: true,
+      soundFilePath: null
+    });
     setName('');
     setIntervalMinutes('30');
     setMessage(createDefaultHealthReminderMessage(30));
@@ -136,6 +159,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
       name: trimmedName,
       intervalMinutes: interval,
       message: trimmedMessage,
+      soundEnabled: true,
       soundFilePath: null
     });
     setEditingId(null);
@@ -199,6 +223,13 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
         </div>
       </header>
 
+      <SoundSettingsBar
+        soundFilePath={soundFilePath}
+        onSelectSound={onSelectSound}
+        onResetSound={onResetSound}
+        testIdPrefix="health-sound"
+      />
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {adding ? (
           <form
@@ -233,7 +264,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                 />
               </label>
               <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
-                🔔 当前使用默认提示音（xianchen_ice_sparkle_1p5s.wav）；自定义附件能力暂不可用。
+                每条提醒默认开启提示音；具体音源（默认 / 自定义）在顶部设置。
               </p>
             </div>
             <label className="block text-[11px] text-assistant-muted">
@@ -397,7 +428,7 @@ export function HealthWindow({ reminders, now, onToggle, onAdd, onUpdate, onDele
                         />
                       </label>
                       <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
-                        🔔 当前使用默认提示音（xianchen_ice_sparkle_1p5s.wav）；自定义附件能力暂不可用。
+                        每条提醒默认开启提示音；具体音源（默认 / 自定义）在顶部设置。
                       </p>
                     </div>
                     <label className="block text-[11px] text-assistant-muted">

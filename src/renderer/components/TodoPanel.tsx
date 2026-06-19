@@ -9,6 +9,7 @@ import type {
 import { TODO_PRIORITY_DEFAULT } from '../../shared/types';
 import { ActionButton } from './common/ActionButton';
 import { PriorityBadge, PrioritySelector } from './PrioritySelector';
+import { SoundSettingsBar } from './SoundSettingsBar';
 import { TimeWheelPicker } from './TimeWheelPicker';
 
 type TodoPanelProps = {
@@ -18,6 +19,12 @@ type TodoPanelProps = {
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, input: UpdateTodoInput) => void;
+  /** 全局提示音设置（今日计划 / 健康节律共用）。 */
+  soundFilePath: string | null;
+  /** 用户选了新提示音文件。父组件负责写盘 + 写 settings。 */
+  onSelectSound: (file: File) => void;
+  /** 用户点了"恢复默认"。父组件负责把 settings.general.soundFilePath 写回 null。 */
+  onResetSound: () => void;
 };
 
 /**
@@ -35,7 +42,17 @@ type TodoPanelProps = {
  *   - 列表非空时只显示 `unfinishedCount` 一句，**不**叠加"今日事项已清空"等
  *     历史重复标签。
  */
-export function TodoPanel({ dateLabel, todos, onAdd, onToggle, onDelete, onUpdate }: TodoPanelProps) {
+export function TodoPanel({
+  dateLabel,
+  todos,
+  onAdd,
+  onToggle,
+  onDelete,
+  onUpdate,
+  soundFilePath,
+  onSelectSound,
+  onResetSound
+}: TodoPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [reminderTime, setReminderTime] = useState('');
@@ -155,6 +172,13 @@ export function TodoPanel({ dateLabel, todos, onAdd, onToggle, onDelete, onUpdat
           />
         </div>
       </header>
+
+      <SoundSettingsBar
+        soundFilePath={soundFilePath}
+        onSelectSound={onSelectSound}
+        onResetSound={onResetSound}
+        testIdPrefix="todo-sound"
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {adding ? (

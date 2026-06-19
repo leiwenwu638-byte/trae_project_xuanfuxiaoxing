@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HealthWindow } from './HealthWindow';
 import type { HealthReminder } from '../../shared/types';
 
@@ -16,6 +16,23 @@ const reminder: HealthReminder = {
   nextTriggerAt: '2026-06-10T09:30:00.000Z'
 };
 
+// 公共 props：所有 HealthWindow 测试都共用
+// （soundFilePath / onSelectSound / onResetSound 在本阶段是必传 prop）
+function buildProps(overrides: Partial<React.ComponentProps<typeof HealthWindow>> = {}) {
+  return {
+    reminders: [reminder],
+    now: new Date('2026-06-10T09:15:00.000Z'),
+    onToggle: vi.fn(),
+    onAdd: vi.fn(),
+    onUpdate: vi.fn(),
+    onDelete: vi.fn(),
+    soundFilePath: null as string | null,
+    onSelectSound: vi.fn(),
+    onResetSound: vi.fn(),
+    ...overrides
+  };
+}
+
 describe('HealthWindow', () => {
   beforeEach(() => {
     // 清理上一测试残留的 `window.confirm` / `console.warn` spy，
@@ -25,16 +42,7 @@ describe('HealthWindow', () => {
 
   it('renders reminder progress and toggles pause state', () => {
     const onToggle = vi.fn();
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={onToggle}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onToggle })} />);
 
     expect(screen.getByText('定时喝水')).toBeInTheDocument();
     expect(screen.getByText('剩余 15 分钟')).toBeInTheDocument();
@@ -45,31 +53,13 @@ describe('HealthWindow', () => {
   });
 
   it('does not expose an in-page close button', () => {
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps()} />);
 
     expect(screen.queryByRole('button', { name: '关闭提醒管理' })).toBeNull();
   });
 
   it('exposes a per-item delete button with trash icon', () => {
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps()} />);
 
     // 仿照 TodoPanel 今日计划页面的删除按钮 aria-label
     const btn = screen.getByRole('button', { name: '删除：定时喝水' });
@@ -85,16 +75,7 @@ describe('HealthWindow', () => {
     const onDelete = vi.fn();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={onDelete}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onDelete })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '删除：定时喝水' }));
 
@@ -108,16 +89,7 @@ describe('HealthWindow', () => {
     const onDelete = vi.fn();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={onDelete}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onDelete })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '删除：定时喝水' }));
 
@@ -132,16 +104,7 @@ describe('HealthWindow', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={onDelete}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onDelete })} />);
 
     expect(() =>
       fireEvent.click(screen.getByRole('button', { name: '删除：定时喝水' }))
@@ -151,16 +114,7 @@ describe('HealthWindow', () => {
 
   it('still toggles pause state after adding a delete button (regression)', () => {
     const onToggle = vi.fn();
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={onToggle}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onToggle })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '暂停：定时喝水' }));
     expect(onToggle).toHaveBeenCalledWith('water');
@@ -170,16 +124,7 @@ describe('HealthWindow', () => {
     const onDelete = vi.fn();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={onDelete}
-      />
-    );
+    render(<HealthWindow {...buildProps({ onDelete })} />);
 
     // 进入编辑态
     fireEvent.click(screen.getByRole('button', { name: '编辑：定时喝水' }));
@@ -191,16 +136,14 @@ describe('HealthWindow', () => {
     expect(screen.getByRole('button', { name: '删除：定时喝水' })).toBeInTheDocument();
   });
 
-  it('adds a custom health reminder', () => {
+  it('adds a custom health reminder with default sound enabled', () => {
     const onAdd = vi.fn();
     render(
       <HealthWindow
-        reminders={[]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={onAdd}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
+        {...buildProps({
+          reminders: [],
+          onAdd
+        })}
       />
     );
 
@@ -210,12 +153,12 @@ describe('HealthWindow', () => {
     fireEvent.change(screen.getByLabelText('提醒内容'), { target: { value: '站起来拉伸肩颈！' } });
     fireEvent.click(screen.getByRole('button', { name: '保存提醒' }));
 
-    // 提示音附件能力已暂时下线（详见 HealthWindow.tsx 注释），
-    // 前端永远传 `soundFilePath: null`，后端会 fallback 到默认音。
+    // 单条 reminder 永远 soundEnabled=true（音源走全局 settings.general.soundFilePath）。
     expect(onAdd).toHaveBeenCalledWith({
       name: '拉伸',
       intervalMinutes: 20,
       message: '站起来拉伸肩颈！',
+      soundEnabled: true,
       soundFilePath: null
     });
   });
@@ -224,12 +167,10 @@ describe('HealthWindow', () => {
     const onAdd = vi.fn();
     render(
       <HealthWindow
-        reminders={[]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={onAdd}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
+        {...buildProps({
+          reminders: [],
+          onAdd
+        })}
       />
     );
 
@@ -240,16 +181,7 @@ describe('HealthWindow', () => {
   });
 
   it('shows a custom validation message for invalid intervals', () => {
-    render(
-      <HealthWindow
-        reminders={[]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps({ reminders: [] })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加提醒' }));
     fireEvent.change(screen.getByLabelText('提醒名称'), { target: { value: '拉伸' } });
@@ -265,12 +197,10 @@ describe('HealthWindow', () => {
 
     render(
       <HealthWindow
-        reminders={[editableReminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={onUpdate}
-        onDelete={vi.fn()}
+        {...buildProps({
+          reminders: [editableReminder],
+          onUpdate
+        })}
       />
     );
 
@@ -280,26 +210,17 @@ describe('HealthWindow', () => {
     fireEvent.change(screen.getByLabelText('修改提醒内容'), { target: { value: '离开座位走一走！' } });
     fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
 
-    // 提示音附件能力已下线 → 前端永远传 null，详见 HealthWindow.tsx 注释。
     expect(onUpdate).toHaveBeenCalledWith('custom', {
       name: 'Walk around',
       intervalMinutes: 45,
       message: '离开座位走一走！',
+      soundEnabled: true,
       soundFilePath: null
     });
   });
 
   it('renders delete, edit and toggle buttons in that order on the action row', () => {
-    render(
-      <HealthWindow
-        reminders={[reminder]}
-        now={new Date('2026-06-10T09:15:00.000Z')}
-        onToggle={vi.fn()}
-        onAdd={vi.fn()}
-        onUpdate={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
+    render(<HealthWindow {...buildProps()} />);
 
     const actionRow = screen.getByTestId('delete-reminder-water').parentElement!;
     const buttons = Array.from(actionRow.querySelectorAll('button'));
@@ -307,5 +228,41 @@ describe('HealthWindow', () => {
     expect(labels[0]).toBe('编辑：定时喝水');
     expect(labels[1]).toBe('暂停：定时喝水');
     expect(labels[2]).toBe('删除：定时喝水');
+  });
+
+  // -------------------------------------------------------------------------
+  // SoundSettingsBar（全局提示音设置）相关
+  // -------------------------------------------------------------------------
+
+  it('shows 默认 status when soundFilePath is null', () => {
+    render(<HealthWindow {...buildProps({ soundFilePath: null })} />);
+    expect(screen.getByTestId('health-sound-status')).toHaveTextContent('默认');
+  });
+
+  it('shows 自定义 status and a reset button when soundFilePath is set', () => {
+    const onResetSound = vi.fn();
+    render(
+      <HealthWindow
+        {...buildProps({
+          soundFilePath: 'C:/Users/me/sounds/water.wav',
+          onResetSound
+        })}
+      />
+    );
+    expect(screen.getByTestId('health-sound-status')).toHaveTextContent('自定义');
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认提示音' }));
+    expect(onResetSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards a selected audio File to onSelectSound', () => {
+    const onSelectSound = vi.fn();
+    render(<HealthWindow {...buildProps({ onSelectSound })} />);
+
+    const file = new File(['x'], 'ding.wav', { type: 'audio/wav' });
+    fireEvent.change(screen.getByTestId('health-sound-file-input'), {
+      target: { files: [file] }
+    });
+    expect(onSelectSound).toHaveBeenCalledTimes(1);
+    expect(onSelectSound.mock.calls[0][0]).toBe(file);
   });
 });

@@ -131,6 +131,11 @@ pub fn run() {
             commands::toggle_reminder,
             commands::get_settings,
             commands::update_settings,
+            // 第十二阶段：自定义提示音文件落盘。
+            // 前端 `desktopApi.saveCustomSound(name, bytes)` → 把音频写到
+            // `<app_data_dir>/sounds/<safe_name>`，返回真实绝对路径。
+            // 路径随后被写入 `AppSettings.general.soundFilePath`。
+            commands::save_custom_sound_file,
             // 第五阶段：窗口管理 command。
             // 之前在第四阶段没有注册，导致前端 invoke 这五个 command 时
             // 会被 Tauri 拒绝（"Command not found"）。现在显式列出：

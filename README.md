@@ -24,16 +24,19 @@
 | 样式方案   | [Tailwind CSS 3](https://tailwindcss.com/) + 少量手写 CSS             |
 | 单元测试   | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/) |
 | 图标库     | [lucide-react](https://lucide.dev/)                                   |
-| 持久化     | 本地 JSON（`tauri-plugin-store` + 自写 `storage.rs` 兜底）            |
+| 持久化     | 本地 JSON（Rust `storage.rs` 自实现）                                  |
 
 ## 核心功能
 
 - **今日待办**：新增 / 编辑 / 删除 / 标记完成；支持四级优先级（critical / high / medium / low）；
 - **任务优先级**：列表项左侧用 `PriorityBadge` 视觉化，编辑表单内 `PrioritySelector` 切换；
 - **滚轮式提醒时间选择器（`TimeWheelPicker`）**：双列滚轮 + 键盘上下方向键，输出 `HH:mm`；
-- **今日计划提前提醒**：在任务时间前 10 分钟弹出 `ReminderPopup`，到点后不再补提醒；
+- **今日计划提前提醒**：在任务时间前 **10 分钟**弹出 `ReminderPopup` 一次；到点不再提醒；过点不补提醒；
 - **健康节律循环提醒**：周期性提醒（5–480 分钟），进度条 + 剩余时间实时刷新；
-- **`ReminderPopup` 桌面弹窗**：独立 webview 窗口，播放默认提示音 `assets/xianchen_ice_sparkle_1p5s.wav`；
+- **`ReminderPopup` 桌面弹窗**：独立 webview 窗口，播放默认提示音（`public/sound-default.wav`）；
+- **可自定义提示音**：在"今日计划 / 健康节律"顶部点"更换"上传 wav / mp3 / ogg（≤ 5MB），
+  写到 `app_data_dir/sounds/`，UI 只显示"提示音：默认 / 自定义"，不暴露底层文件名；
+  两页面共用同一设置；点"恢复默认"清回默认音；
 - **系统托盘常驻**：托盘菜单"今日计划 / 健康节律 / 显示提醒测试 / 退出"，未关闭窗口也可继续工作；
 - **本地 JSON 持久化**：所有数据落盘 `app_data_dir`，无任何云端依赖。
 
@@ -55,6 +58,14 @@ npm run tauri:dev
 
 `tauri:dev` 等价于 `tauri dev`：Tauri 会先执行 `npm run dev:vite`（Vite 起在
 `http://127.0.0.1:5173`）再拉起 Rust 进程、加载前端页面。
+
+> ⚠️ 首次启动 `npm run tauri:dev` 时 Tauri 会冷编译 Rust 依赖（chrono /
+> tauri / uuid ...），控制台会卡在 `Compiling` 数分钟，**这是预期行为**；
+> 后续 `tauri dev` 会复用 `src-tauri/target` 缓存（可通过
+> `CARGO_TARGET_DIR` 改路径），启动会快很多。实际"打开窗口后页面加载慢"
+> 还是 Rust 编译慢，可开启 DevTools Console 看前端 `console.info('[App] getSnapshot total=...ms')`
+> ——这条日志只在 `>= 50ms` 时打印，是 Rust 读盘 + IPC + setState 的总耗时，
+> 正常 < 50ms（不打印）。
 
 ## 前端检查
 

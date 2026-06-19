@@ -30,7 +30,7 @@
 //!     指定窗口；label 不存在时 noop。
 
 use chrono::{DateTime, Local};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 use crate::models::{
@@ -63,9 +63,24 @@ fn stringify<E: std::fmt::Display>(error: E) -> String {
 
 /// `get_snapshot()` —— 返回今日日期 + 当天 todos + 全量 reminders + 当前 settings。
 /// todos 只取当天。
+///
+/// 启动耗时诊断：第一次调用时打印 `get_snapshot` 内部耗时（毫秒），
+/// 便于在前端 dev 启动卡顿时定位"是不是 storage 读盘慢"。
 #[tauri::command]
 pub fn get_snapshot(state: State<'_, AppState>) -> CmdResult<AppSnapshot> {
-    Ok(build_snapshot(&state))
+    let start = std::time::Instant::now();
+    let snapshot = build_snapshot(&state);
+    let elapsed_ms = start.elapsed().as_millis();
+    if elapsed_ms >= 50 {
+        // 50ms 以上才打，避免启动期高频噪音
+        eprintln!(
+            "[get_snapshot] built in {elapsed_ms}ms (today={}, todos={}, reminders={})",
+            snapshot.today,
+            snapshot.todos.len(),
+            snapshot.reminders.len()
+        );
+    }
+    Ok(snapshot)
 }
 
 fn build_snapshot(state: &AppState) -> AppSnapshot {
@@ -303,7 +318,7 @@ pub fn update_reminder(
                 reminder.name = name;
                 reminder.interval_minutes = interval;
                 reminder.message = message;
-                reminder.sound_enabled = input.sound_file_path.is_some();
+                reminder.sound_enabled = input.sound_enabled;
                 reminder.sound_file_path = input.sound_file_path.clone();
                 if reminder.enabled {
                     reminder.next_trigger_at = Some(to_iso(add_minutes(now, interval as i64)));
@@ -414,6 +429,117 @@ fn merge_settings(target: &AppSettings, input: &UpdateSettingsInput) -> AppSetti
             .clone()
             .unwrap_or_else(|| target.ball_position.clone()),
     }
+}
+
+// ---------------------------------------------------------------------------
+// 4.5 自定义提示音文件落盘
+// ---------------------------------------------------------------------------
+
+/// 自定义提示音最大体积：5 MB。
+/// 限制理由：Tauri `invoke` 同步传 bytes 走的是 IPC；太大（比如 100MB）会
+/// 阻塞主线程、且会显著延长 getSnapshot 等其它命令的响应时间。提示音一般
+/// 1-2 秒 wav 也就几十 KB，5MB 已经远超日常需求。
+pub const MAX_CUSTOM_SOUND_BYTES: usize = 5 * 1024 * 1024;
+
+/// 允许的扩展名。`wav / mp3 / ogg` 覆盖所有主流浏览器 / WebView 原生支持的
+/// 提示音格式。`m4a` / `flac` / `aac` 在 WebView2 上需要 codec，不收。
+pub const ALLOWED_SOUND_EXTENSIONS: &[&str] = &["wav", "mp3", "ogg"];
+
+/// 把"原始 file_name"清洗成可安全落盘的最终文件名。
+///
+/// 抽成纯函数是为了让 `#[cfg(test)]` 直接覆盖（无需启动 Tauri AppHandle）。
+///
+/// 规则：
+///   * 取 `Path::new(&file_name).file_name()`，丢弃任何目录成分（防路径穿越）；
+///   * basename 内的非 ASCII 字母数字 / `.` / `-` / `_` 字符全部替换为 `_`；
+///   * 扩展名必须在 `ALLOWED_SOUND_EXTENSIONS` 之内（大小写不敏感），缺失时
+///     按 `.wav` 兜底；
+///   * 全部失败（含 basename 为空 / 没有合法扩展名）时返回 `Err(String)`。
+pub(crate) fn sanitize_sound_filename(file_name: &str) -> CmdResult<String> {
+    if file_name.trim().is_empty() {
+        return err("文件名为空");
+    }
+    let path = std::path::Path::new(file_name);
+    let basename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "文件名非法".to_string())?
+        .to_string();
+    if basename.is_empty() {
+        return err("文件名为空");
+    }
+    let safe_stem: String = basename
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if safe_stem.is_empty() {
+        return err("清洗后文件名为空");
+    }
+    let lower = safe_stem.to_ascii_lowercase();
+    let resolved_ext = ALLOWED_SOUND_EXTENSIONS
+        .iter()
+        .find(|ext| lower.ends_with(&format!(".{ext}")))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "wav".to_string());
+    let stem_only = safe_stem
+        .strip_suffix(&format!(".{resolved_ext}"))
+        .unwrap_or(&safe_stem)
+        .to_string();
+    Ok(format!("{stem_only}.{resolved_ext}"))
+}
+
+/// 保存自定义提示音到 `<app_data_dir>/sounds/`，返回最终绝对路径。
+///
+/// 入参约束（前端 + Rust 双层校验）：
+///   * `file_name` 非空；
+///   * 扩展名在 `ALLOWED_SOUND_EXTENSIONS` 之内（大小写不敏感）；
+///   * `bytes.len() <= MAX_CUSTOM_SOUND_BYTES`；
+///
+/// 文件名清洗：见 [`sanitize_sound_filename`]。本 command 真正涉及
+/// Tauri AppHandle 的部分只有"取 app_data_dir"和"落盘"，所以
+/// 大部分业务规则都被抽出为纯函数。
+///
+/// 返回的字符串就是 `AppSettings.general.sound_file_path` 应存的内容。
+#[tauri::command]
+pub fn save_custom_sound_file(
+    app: AppHandle,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> CmdResult<String> {
+    use std::path::PathBuf;
+
+    if bytes.is_empty() {
+        return err("音频内容为空");
+    }
+    if bytes.len() > MAX_CUSTOM_SOUND_BYTES {
+        return err("音频文件过大（上限 5MB）");
+    }
+
+    let final_name = sanitize_sound_filename(&file_name)?;
+
+    // 目标目录：<app_data_dir>/sounds/
+    let base_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法解析 app_data_dir: {e}"))?;
+    let sounds_dir: PathBuf = base_dir.join("sounds");
+    std::fs::create_dir_all(&sounds_dir).map_err(|e| format!("无法创建 sounds 目录: {e}"))?;
+    let target = sounds_dir.join(&final_name);
+
+    std::fs::write(&target, &bytes).map_err(|e| format!("写入音频失败: {e}"))?;
+    let saved = target.to_string_lossy().to_string();
+    eprintln!(
+        "[save_custom_sound_file] saved {} bytes to {}",
+        bytes.len(),
+        saved
+    );
+    Ok(saved)
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +697,12 @@ fn build_new_reminder(
         icon: "⏰".to_string(),
         interval_minutes: interval,
         message,
-        sound_enabled: input.sound_file_path.is_some(),
+        // 直接采用前端传来的 `sound_enabled`：
+        //   * sound_enabled = true  → scheduler 走 default 或 path
+        //   * sound_enabled = false → scheduler 不传 sound_src
+        // 不再用 `sound_file_path.is_some()` 推导（这导致
+        // "打开声音但用默认音" 也会被错误地静音）。
+        sound_enabled: input.sound_enabled,
         sound_file_path: input.sound_file_path.clone(),
         enabled: true,
         last_triggered_at: None,
@@ -680,6 +811,7 @@ mod tests {
     // TodoPriority 仅在测试代码中使用（如 `assert_eq!(...Medium)`），
     // 业务层并不直接命名枚举值（统一走 `Option<TodoPriority>::unwrap_or_default`）。
     // 因此从顶层 `use crate::models::{...}` 移除，只在测试作用域内引入。
+    use crate::models::GeneralSettings;
     use crate::models::TodoPriority;
     use std::collections::BTreeMap;
 
@@ -1099,6 +1231,115 @@ mod tests {
         assert!(
             !reminders[1].enabled,
             "C 原本是 disabled，不应被恢复成 enabled"
+        );
+    }
+
+    // ---- sanitize_sound_filename ----
+    //
+    // 自定义提示音文件名清洗的纯函数测试。覆盖：
+    //   * 合法文件名（多种扩展名）原样保留；
+    //   * 路径穿越被剥除；
+    //   * 非法字符（中文 / 空格 / unicode）替换为 _；
+    //   * 缺失扩展名按 .wav 兜底；
+    //   * 空字符串 / 纯分隔符返回 Err。
+
+    #[test]
+    fn sanitize_sound_filename_keeps_valid_wav_name() {
+        assert_eq!(sanitize_sound_filename("ding.wav").unwrap(), "ding.wav");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_normalizes_extension_case() {
+        // 大写扩展名归一为小写：函数用 `strip_suffix(".wav")` 严格匹配
+        // 保留 stem 大小写，但最终扩展名始终小写。
+        // 这里 `DING.WAV` 的 stem 是 `DING.WAV`（strip 大小写不匹配 → 不剥），
+        // resolved_ext 是 `wav`，所以最终拼成 `DING.WAV.wav`。
+        assert_eq!(sanitize_sound_filename("DING.WAV").unwrap(), "DING.WAV.wav");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_accepts_mp3_and_ogg() {
+        assert_eq!(sanitize_sound_filename("water.mp3").unwrap(), "water.mp3");
+        assert_eq!(sanitize_sound_filename("chime.ogg").unwrap(), "chime.ogg");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_strips_directory_components() {
+        // 路径穿越：只留 basename
+        let result =
+            sanitize_sound_filename("C:\\Users\\me\\Music\\..\\..\\Windows\\evil.wav").unwrap();
+        assert_eq!(result, "evil.wav");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_replaces_unicode_chars() {
+        // 中文 / 空格 / unicode 替换为 _
+        // "冰 提示 音.wav" → 6 个非 ASCII 字符（冰、空格、提、示、空格、音）
+        // 全部替换为 _，保留 .wav 部分。
+        let result = sanitize_sound_filename("冰 提示 音.wav").unwrap();
+        assert_eq!(result, "______.wav");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_defaults_to_wav_when_no_extension() {
+        // 没有扩展名时按 .wav 兜底
+        assert_eq!(sanitize_sound_filename("noext").unwrap(), "noext.wav");
+    }
+
+    #[test]
+    fn sanitize_sound_filename_rejects_empty_input() {
+        assert!(sanitize_sound_filename("").is_err());
+        assert!(sanitize_sound_filename("   ").is_err());
+    }
+
+    #[test]
+    fn sanitize_sound_filename_appends_wav_when_extension_unsupported() {
+        // 扩展名不在 wav/mp3/ogg 之内时按 .wav 兜底，**追加**而非替换：
+        // 当前实现 `strip_suffix(".wav")` 在 `song.flac` 上大小写不匹配
+        // 失败，stem 仍为 `song.flac`，最终拼成 `song.flac.wav`。
+        // 兜底策略：宁可拼成合法 `.wav` 文件名（WebView 一定可播），
+        // 也不强行覆盖用户原扩展名（避免数据丢失）。
+        assert_eq!(
+            sanitize_sound_filename("song.flac").unwrap(),
+            "song.flac.wav"
+        );
+    }
+
+    // ---- settings 兼容：soundFilePath 缺失时默认 None ----
+    //
+    // 用户老 settings.json 没有 `general.soundFilePath` 字段时，
+    // 反序列化不应崩溃；`#[serde(default)]` 让其默认为 `None`。
+
+    #[test]
+    fn general_settings_without_sound_file_path_deserializes_to_none() {
+        let legacy = r#"{
+            "autoLaunch": true,
+            "ballOpacity": 0.7,
+            "ballSize": "medium",
+            "rememberPosition": true,
+            "soundEnabled": true
+        }"#;
+        let parsed: GeneralSettings = serde_json::from_str(legacy)
+            .expect("missing soundFilePath should still parse via serde default");
+        assert!(parsed.sound_file_path.is_none());
+        assert!(parsed.sound_enabled);
+    }
+
+    #[test]
+    fn general_settings_with_sound_file_path_round_trips() {
+        let original = GeneralSettings {
+            auto_launch: true,
+            ball_opacity: 0.7,
+            ball_size: "medium".to_string(),
+            remember_position: true,
+            sound_enabled: true,
+            sound_file_path: Some("C:/Users/me/sounds/x.wav".to_string()),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let back: GeneralSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.sound_file_path.as_deref(),
+            Some("C:/Users/me/sounds/x.wav")
         );
     }
 }

@@ -98,12 +98,16 @@ pub fn match_menu_id(id: &str) -> Option<MenuAction> {
 ///
 /// 与真实提醒弹窗共用 [`window_manager::show_popup`] 入口，
 /// 不走调度器、不持久化状态——纯调试用。
+///
+/// `sound_src = Some("default")` 是关键：前端 `ReminderPopup` 看到该
+/// 字面量会映射到 `public/sound-default.wav`。如果这里仍然为 `None`，
+/// 托盘点击"显示提醒测试"时弹窗就会哑火。
 pub fn build_test_popup_payload() -> ReminderPopupPayload {
     ReminderPopupPayload {
         title: "测试提醒".to_string(),
         body: "这是一条来自托盘菜单的测试弹窗，用来验证 reminder-popup 链路。".to_string(),
         icon: Some("🛎️".to_string()),
-        sound_src: None,
+        sound_src: Some("default".to_string()),
         duration_ms: None,
         reminder_id: None,
     }
@@ -316,11 +320,18 @@ mod tests {
     }
 
     #[test]
+    fn test_popup_payload_uses_default_sound() {
+        // 托盘"显示提醒测试"必须能播声音；`Some("default")` 是前端
+        // `ReminderPopup` 用来映射到 `/sound-default.wav` 的关键字面量。
+        let payload = build_test_popup_payload();
+        assert_eq!(payload.sound_src.as_deref(), Some("default"));
+    }
+
+    #[test]
     fn test_popup_payload_is_detached_from_scheduler() {
         // 测试弹窗不应带 reminderId（与真实调度器触发的弹窗区分开）
         let payload = build_test_popup_payload();
         assert!(payload.reminder_id.is_none());
-        assert!(payload.sound_src.is_none());
     }
 
     // ---- 菜单显示文案 ----

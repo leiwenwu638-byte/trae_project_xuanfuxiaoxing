@@ -53,6 +53,17 @@ export interface DesktopReminderApi {
 export interface DesktopSettingsApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(input: UpdateSettingsInput): Promise<AppSettings>;
+  /**
+   * 把用户选择的音频文件 bytes 写到 `<app_data_dir>/sounds/`，返回真实绝对路径。
+   *
+   * 为什么不直接 `input.files[0].name` 拿本地路径：
+   *   * Tauri WebView / 浏览器里 `file.path` 不可用；
+   *   * `input.value` 只能拿到 `C:\fakepath\xxx.wav`，无法被 `<audio src>` 播放。
+   * 所以前端只能把 `File.arrayBuffer()` 读成 `Uint8Array`，再 invoke Rust 让
+   * 后端写盘并返回绝对路径。`settings.updateSettings({ general: { soundFilePath } })`
+   * 随后把该路径持久化到 settings.json。
+   */
+  saveCustomSound(fileName: string, bytes: Uint8Array): Promise<string>;
 }
 
 export interface DesktopWindowApi {
@@ -167,6 +178,7 @@ export const REQUIRED_TAURI_COMMANDS_FOR_TEST = new Set<string>([
   'delete_reminder',
   'get_settings',
   'update_settings',
+  'save_custom_sound_file',
   'open_todo_window',
   'open_health_window',
   'show_reminder_popup',
@@ -225,6 +237,15 @@ function createTauriAdapter(): DesktopApi {
         const current = await coreInvoke<AppSettings>('get_settings');
         const merged = mergeSettings(current, input);
         return coreInvoke<AppSettings>('update_settings', { input: merged });
+      },
+      saveCustomSound: async (fileName, bytes) => {
+        // Tauri 的 invoke 在 IPC 上需要把 Uint8Array 转为普通数组才能
+        // 走 JSON 序列化；这里用 Array.from 让 bytes 进入数组形态。
+        // Rust 端签名是 `bytes: Vec<u8>`，JSON 数组会被 serde 解码为 Vec<u8>。
+        return coreInvoke<string>('save_custom_sound_file', {
+          fileName,
+          bytes: Array.from(bytes)
+        });
       }
     },
     window: {
@@ -313,7 +334,10 @@ function createMockAdapter(): DesktopApi {
     },
     settings: {
       getSettings: async () => fallback.settings,
-      updateSettings: async (input) => mergeSettings(fallback.settings, input)
+      updateSettings: async (input) => mergeSettings(fallback.settings, input),
+      // mock 平台不写盘；返回文件 basename 当作"伪路径"，仅满足
+      // vitest / Storybook 不真触发 IPC。生产代码永远不会走这个分支。
+      saveCustomSound: async (fileName) => `/mock/sounds/${fileName}`
     },
     window: {
       openTodoWindow: noop,

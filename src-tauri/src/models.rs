@@ -123,10 +123,23 @@ pub struct AddHealthReminderInput {
     /// message 可选；缺失时由后端按 intervalMinutes 生成默认文案。
     #[serde(default)]
     pub message: Option<String>,
+    /// 用户在前端勾选"是否启用声音"。与 `sound_file_path` 解耦：
+    ///   * `sound_enabled = false` → 不播放；
+    ///   * `sound_enabled = true && sound_file_path = None` → 走 `default`；
+    ///   * `sound_enabled = true && sound_file_path = Some(path)` → 自定义音频。
+    ///
+    /// 旧版本由 `sound_file_path.is_some()` 推导，导致声音开关与附件耦合；
+    /// 本阶段拆开后，UI 可以独立打开"声音"但仍使用默认音。
+    #[serde(default = "default_true")]
+    pub sound_enabled: bool,
     pub sound_file_path: Option<String>,
 }
 
 pub type UpdateHealthReminderInput = AddHealthReminderInput;
+
+fn default_true() -> bool {
+    true
+}
 
 // ---------------------------------------------------------------------------
 // 3. AppSettings（嵌套结构）
@@ -160,6 +173,16 @@ pub struct GeneralSettings {
     pub ball_size: String,
     pub remember_position: bool,
     pub sound_enabled: bool,
+    /// 自定义提示音文件路径（绝对路径，已复制到 `app_data_dir/sounds/`）。
+    ///
+    /// 语义：
+    ///   * `None` → 使用内置默认提示音 `public/sound-default.wav`；
+    ///   * `Some(path)` → 使用该本地音频文件。
+    ///
+    /// 今日计划 / 健康节律**共用**本设置。`#serde(default)` 保证老
+    /// `settings.json` 没有此字段时不会反序列化失败。
+    #[serde(default)]
+    pub sound_file_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -264,6 +287,7 @@ pub fn default_general_settings() -> GeneralSettings {
         ball_size: "medium".to_string(),
         remember_position: true,
         sound_enabled: true,
+        sound_file_path: None,
     }
 }
 

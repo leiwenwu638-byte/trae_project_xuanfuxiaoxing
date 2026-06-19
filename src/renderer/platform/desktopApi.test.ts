@@ -7,7 +7,8 @@ const sampleSettings: AppSettings = {
     ballOpacity: 1,
     ballSize: 'medium',
     rememberPosition: true,
-    soundEnabled: true
+    soundEnabled: true,
+    soundFilePath: null
   },
   todo: { advanceReminderMinutes: 10 },
   ballPosition: { x: 100, y: 200 }
@@ -99,7 +100,8 @@ describe('desktopApi', () => {
         ballOpacity: 0.7,
         ballSize: 'medium',
         rememberPosition: true,
-        soundEnabled: true
+        soundEnabled: true,
+        soundFilePath: null
       });
     });
 
@@ -161,6 +163,7 @@ describe('desktopApi', () => {
         name: '喝水',
         intervalMinutes: 30,
         message: '该喝水了',
+        soundEnabled: true,
         soundFilePath: null
       };
       await desktopApi.reminder.addReminder(input);

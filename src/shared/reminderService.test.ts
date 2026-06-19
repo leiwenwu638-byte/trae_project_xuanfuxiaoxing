@@ -88,6 +88,7 @@ describe('reminderService', () => {
       name: '拉伸',
       intervalMinutes: 20,
       message: '站起来拉伸肩颈！',
+      soundEnabled: true,
       soundFilePath: 'D:\\Sounds\\ice.wav',
       now: new Date('2026-06-10T09:00:00.000Z')
     });
@@ -104,9 +105,9 @@ describe('reminderService', () => {
       nextTriggerAt: '2026-06-10T09:20:00.000Z'
     });
 
-    expect(() => addHealthReminder([], { name: '', intervalMinutes: 20 })).toThrow('提醒名称不能为空');
-    expect(() => addHealthReminder([], { name: '喝水', intervalMinutes: 4 })).toThrow('间隔时长不能少于 5 分钟');
-    expect(() => addHealthReminder([], { name: '喝水', intervalMinutes: 481 })).toThrow('间隔时长不能超过 480 分钟');
+    expect(() => addHealthReminder([], { name: '', intervalMinutes: 20, soundEnabled: true })).toThrow('提醒名称不能为空');
+    expect(() => addHealthReminder([], { name: '喝水', intervalMinutes: 4, soundEnabled: true })).toThrow('间隔时长不能少于 5 分钟');
+    expect(() => addHealthReminder([], { name: '喝水', intervalMinutes: 481, soundEnabled: true })).toThrow('间隔时长不能超过 480 分钟');
   });
 
   it('updates a custom reminder and reschedules the next trigger', () => {
@@ -127,6 +128,7 @@ describe('reminderService', () => {
         name: 'Walk',
         intervalMinutes: 45,
         message: '离开座位走一走！',
+        soundEnabled: true,
         soundFilePath: 'D:\\Sounds\\walk.wav',
         now: new Date('2026-06-10T09:05:00.000Z')
       }
@@ -142,7 +144,7 @@ describe('reminderService', () => {
       nextTriggerAt: '2026-06-10T09:50:00.000Z'
     });
 
-    expect(() => updateHealthReminder([baseReminder], 'drink', { name: '', intervalMinutes: 30, soundFilePath: null })).toThrow(
+    expect(() => updateHealthReminder([baseReminder], 'drink', { name: '', intervalMinutes: 30, soundEnabled: true, soundFilePath: null })).toThrow(
       '提醒名称不能为空'
     );
   });

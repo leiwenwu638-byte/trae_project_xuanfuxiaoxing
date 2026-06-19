@@ -711,6 +711,57 @@ mod tests {
     }
 
     // =======================================================================
+    // 健康提醒 sound_src 三种语义
+    // =======================================================================
+    //
+    // 业务规则（与本阶段产品决议一致）：
+    //   * `sound_enabled = false`                       → `sound_src = None`  （静音）
+    //   * `sound_enabled = true && sound_file_path = None`
+    //                                               → `sound_src = Some("default")`（默认音）
+    //   * `sound_enabled = true && sound_file_path = Some(path)`
+    //                                               → `sound_src = Some(path)`     （自定义音）
+    //
+    // 旧版本由 `sound_file_path.is_some()` 推导 `sound_enabled`，导致
+    // "打开声音但用默认音" 也会被错误地静音。本测试组钉住新行为。
+
+    #[test]
+    fn health_reminder_sound_disabled_emits_no_sound_src() {
+        let now = sample_now();
+        let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
+        r.sound_enabled = false;
+        // 即使给了自定义路径，关闭声音时也忽略
+        r.sound_file_path = Some("C:/x/custom.wav".to_string());
+        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(plan.outcome.events[0].sound_src, None);
+    }
+
+    #[test]
+    fn health_reminder_sound_enabled_no_path_emits_default() {
+        let now = sample_now();
+        let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
+        r.sound_enabled = true;
+        r.sound_file_path = None;
+        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(plan.outcome.events[0].sound_src.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn health_reminder_sound_enabled_with_custom_path_emits_path() {
+        let now = sample_now();
+        let mut r = health_reminder("water", "定时喝水", 30, "2026-06-17T10:00:00.000+08:00");
+        r.sound_enabled = true;
+        r.sound_file_path = Some("C:/Users/me/sounds/water.mp3".to_string());
+        let plan = compute_tick("2026-06-17", &[], &[r], now);
+        assert_eq!(plan.outcome.events.len(), 1);
+        assert_eq!(
+            plan.outcome.events[0].sound_src.as_deref(),
+            Some("C:/Users/me/sounds/water.mp3")
+        );
+    }
+
+    // =======================================================================
     // todo + health 共存 / 跨天
     // =======================================================================
 

@@ -17,18 +17,26 @@ const todos: Todo[] = [
 ];
 
 describe('TodoPanel', () => {
+  // 公共 props：所有 TodoPanel 测试都共用
+  // （soundFilePath / onSelectSound / onResetSound 在本阶段是必传 prop）
+  function buildProps(overrides: Partial<React.ComponentProps<typeof TodoPanel>> = {}) {
+    return {
+      dateLabel: '2026年6月10日',
+      todos: [] as Todo[],
+      onAdd: vi.fn(),
+      onToggle: vi.fn(),
+      onDelete: vi.fn(),
+      onUpdate: vi.fn(),
+      soundFilePath: null as string | null,
+      onSelectSound: vi.fn(),
+      onResetSound: vi.fn(),
+      ...overrides
+    };
+  }
+
   it('adds a todo with optional reminder time', () => {
     const onAdd = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={onAdd}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ onAdd })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '和老师汇报' } });
@@ -46,16 +54,7 @@ describe('TodoPanel', () => {
   });
 
   it('uses the same top add form pattern as the reminder manager', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={todos}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
 
@@ -64,16 +63,7 @@ describe('TodoPanel', () => {
   });
 
   it('opens the time wheel picker with placeholder when reminder time is empty', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
 
@@ -89,16 +79,7 @@ describe('TodoPanel', () => {
 
   it('clears the reminder time when the clear button is pressed', () => {
     const onAdd = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={onAdd}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ onAdd })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '测试' } });
@@ -117,16 +98,7 @@ describe('TodoPanel', () => {
   });
 
   it('shows validation for empty titles', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
     fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
@@ -137,16 +109,7 @@ describe('TodoPanel', () => {
   it('toggles and deletes todos', () => {
     const onToggle = vi.fn();
     const onDelete = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={todos}
-        onAdd={vi.fn()}
-        onToggle={onToggle}
-        onDelete={onDelete}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos, onToggle, onDelete })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '标记完成：完成作业' }));
     fireEvent.click(screen.getByRole('button', { name: '删除：完成作业' }));
@@ -157,16 +120,7 @@ describe('TodoPanel', () => {
 
   it('edits a todo title and reminder time inline', () => {
     const onUpdate = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={todos}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={onUpdate}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos, onUpdate })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑：完成作业' }));
     fireEvent.change(screen.getByLabelText('修改任务名称'), { target: { value: '修改后的任务' } });
@@ -182,16 +136,7 @@ describe('TodoPanel', () => {
   });
 
   it('prefills the edit form with the existing reminder time', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={todos}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑：完成作业' }));
 
@@ -201,16 +146,7 @@ describe('TodoPanel', () => {
   });
 
   it('does not expose an in-page close button', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={todos}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos })} />);
 
     expect(screen.queryByRole('button', { name: '关闭今日待办' })).toBeNull();
   });
@@ -218,16 +154,7 @@ describe('TodoPanel', () => {
   // ---- 任务优先级（priority）----
 
   it('defaults the add form priority to medium', () => {
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
 
@@ -251,16 +178,7 @@ describe('TodoPanel', () => {
 
   it('saves the selected priority when adding a todo', () => {
     const onAdd = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={onAdd}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ onAdd })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '紧急任务' } });
@@ -278,16 +196,7 @@ describe('TodoPanel', () => {
 
   it('resets the priority back to medium after submitting a todo', () => {
     const onAdd = vi.fn();
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[]}
-        onAdd={onAdd}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ onAdd })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '选 high' } });
@@ -311,32 +220,14 @@ describe('TodoPanel', () => {
       ...todos[0],
       priority: 'high'
     };
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[highTodo]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos: [highTodo] })} />);
 
     expect(screen.getByTestId('todo-priority-badge-high')).toHaveTextContent('重要');
   });
 
   it('uses the same "任务优先级" title in both add and edit forms', () => {
     const mediumTodo: Todo = { ...todos[0], priority: 'medium' };
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[mediumTodo]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos: [mediumTodo] })} />);
 
     // add form
     fireEvent.click(screen.getByRole('button', { name: '添加待办' }));
@@ -366,32 +257,14 @@ describe('TodoPanel', () => {
       remindedAt: null,
       createdAt: '2026-06-10T08:00:00.000Z'
     } as Todo;
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[todoWithoutPriority]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos: [todoWithoutPriority] })} />);
 
     expect(screen.getByTestId('todo-priority-badge-medium')).toHaveTextContent('中等');
   });
 
   it('prefills the edit form with the existing todo priority', () => {
     const highTodo: Todo = { ...todos[0], priority: 'high' };
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[highTodo]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={vi.fn()}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos: [highTodo] })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑：完成作业' }));
 
@@ -409,16 +282,7 @@ describe('TodoPanel', () => {
   it('saves the updated priority when editing a todo', () => {
     const onUpdate = vi.fn();
     const lowTodo: Todo = { ...todos[0], priority: 'low' };
-    render(
-      <TodoPanel
-        dateLabel="2026年6月10日"
-        todos={[lowTodo]}
-        onAdd={vi.fn()}
-        onToggle={vi.fn()}
-        onDelete={vi.fn()}
-        onUpdate={onUpdate}
-      />
-    );
+    render(<TodoPanel {...buildProps({ todos: [lowTodo], onUpdate })} />);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑：完成作业' }));
     fireEvent.click(screen.getByTestId('todo-edit-priority-selector-option-critical'));
@@ -430,5 +294,41 @@ describe('TodoPanel', () => {
       soundEnabled: true,
       priority: 'critical'
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // SoundSettingsBar（全局提示音设置）相关
+  // -------------------------------------------------------------------------
+
+  it('shows 默认 status when soundFilePath is null', () => {
+    render(<TodoPanel {...buildProps({ soundFilePath: null })} />);
+    expect(screen.getByTestId('todo-sound-status')).toHaveTextContent('默认');
+  });
+
+  it('shows 自定义 status and a reset button when soundFilePath is set', () => {
+    const onResetSound = vi.fn();
+    render(
+      <TodoPanel
+        {...buildProps({
+          soundFilePath: 'C:/Users/me/sounds/ding.wav',
+          onResetSound
+        })}
+      />
+    );
+    expect(screen.getByTestId('todo-sound-status')).toHaveTextContent('自定义');
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认提示音' }));
+    expect(onResetSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards a selected audio File to onSelectSound', () => {
+    const onSelectSound = vi.fn();
+    render(<TodoPanel {...buildProps({ onSelectSound })} />);
+
+    const file = new File(['x'], 'ding.wav', { type: 'audio/wav' });
+    fireEvent.change(screen.getByTestId('todo-sound-file-input'), {
+      target: { files: [file] }
+    });
+    expect(onSelectSound).toHaveBeenCalledTimes(1);
+    expect(onSelectSound.mock.calls[0][0]).toBe(file);
   });
 });
