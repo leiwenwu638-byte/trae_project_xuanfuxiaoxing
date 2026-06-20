@@ -1,5 +1,5 @@
 import { Check, Clock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type {
   AddTodoInput,
   AppSnapshot,
@@ -29,6 +29,50 @@ type TodoPanelProps = {
   /** 用户点了"恢复默认"。父组件负责把 settings.general.soundFilePath 写回 null。 */
   onResetSound: () => void;
 };
+
+type TodoSortMode = 'time' | 'priority';
+
+const PRIORITY_WEIGHT: Record<TodoPriority, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3
+};
+
+function compareCompleted(a: Todo, b: Todo): number {
+  return Number(a.completed) - Number(b.completed);
+}
+
+function comparePriority(a: Todo, b: Todo): number {
+  return (
+    PRIORITY_WEIGHT[a.priority ?? TODO_PRIORITY_DEFAULT] -
+    PRIORITY_WEIGHT[b.priority ?? TODO_PRIORITY_DEFAULT]
+  );
+}
+
+function compareReminderTime(a: Todo, b: Todo): number {
+  if (a.reminderTime && b.reminderTime) return a.reminderTime.localeCompare(b.reminderTime);
+  if (a.reminderTime) return -1;
+  if (b.reminderTime) return 1;
+  return 0;
+}
+
+function compareCreatedAt(a: Todo, b: Todo): number {
+  return a.createdAt.localeCompare(b.createdAt);
+}
+
+function sortTodos(todos: Todo[], sortMode: TodoSortMode): Todo[] {
+  return [...todos].sort((a, b) => {
+    const completed = compareCompleted(a, b);
+    if (completed !== 0) return completed;
+
+    if (sortMode === 'priority') {
+      return comparePriority(a, b) || compareReminderTime(a, b) || compareCreatedAt(a, b);
+    }
+
+    return compareReminderTime(a, b) || comparePriority(a, b) || compareCreatedAt(a, b);
+  });
+}
 
 /**
  * 今日待办主面板。
@@ -72,6 +116,7 @@ export function TodoPanel({
   const [editError, setEditError] = useState('');
   const [editTimePulse, setEditTimePulse] = useState(false);
   const [aiPlanOpen, setAiPlanOpen] = useState(false);
+  const [sortMode, setSortMode] = useState<TodoSortMode>('time');
 
   useEffect(() => {
     if (!timePulse) return;
@@ -152,6 +197,7 @@ export function TodoPanel({
   }
 
   const unfinishedCount = todos.filter((todo) => !todo.completed).length;
+  const sortedTodos = useMemo(() => sortTodos(todos, sortMode), [todos, sortMode]);
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
@@ -293,8 +339,23 @@ export function TodoPanel({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-assistant-line">
-            {todos.map((todo) => (
+          <>
+            <div className="flex items-center justify-end border-b border-assistant-line bg-white px-4 py-2">
+              <label className="flex items-center gap-1.5 text-[11px] text-assistant-muted">
+                排序：
+                <select
+                  aria-label="排序方式"
+                  className="h-7 rounded-md border border-assistant-line bg-white px-2 text-[12px] text-assistant-ink outline-none focus:border-assistant-accent/70"
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as TodoSortMode)}
+                >
+                  <option value="time">时间</option>
+                  <option value="priority">重要程度</option>
+                </select>
+              </label>
+            </div>
+            <ul className="divide-y divide-assistant-line">
+            {sortedTodos.map((todo) => (
               <li key={todo.id} className="todo-row-enter px-4 py-3 transition hover:bg-assistant-wash/70">
                 <div className="grid grid-cols-[28px_1fr_auto_28px_28px] items-center gap-2">
                   <button
@@ -411,7 +472,8 @@ export function TodoPanel({
                 ) : null}
               </li>
             ))}
-          </ul>
+            </ul>
+          </>
         )}
       </div>
     </section>

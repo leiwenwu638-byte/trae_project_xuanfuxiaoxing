@@ -38,7 +38,6 @@ export type UpdateSettingsInput = {
 };
 
 export type StateChangeListener = (snapshot: AppSnapshot) => void;
-export type VoidEventListener = () => void;
 
 export interface DesktopTodoApi {
   listTodos(): Promise<Todo[]>;
@@ -123,7 +122,6 @@ export interface DesktopApi {
   ai: DesktopAiApi;
   getSnapshot(): Promise<AppSnapshot>;
   onStateChanged(listener: StateChangeListener): () => void;
-  onOpenAiSettings(listener: VoidEventListener): () => void;
 }
 
 type Platform = DesktopApi['platform'];
@@ -321,28 +319,6 @@ function createTauriAdapter(): DesktopApi {
       applyPlan: (input) => coreInvoke<AppSnapshot>('apply_ai_plan', { input })
     },
     getSnapshot: () => coreInvoke<AppSnapshot>('get_snapshot'),
-    onOpenAiSettings: (listener) => {
-      let unlisten: (() => void) | null = null;
-      let disposed = false;
-      void tauriListen<void>('open-ai-settings', () => listener())
-        .then((fn) => {
-          if (disposed) {
-            fn();
-          } else {
-            unlisten = fn;
-          }
-        })
-        .catch((error) => {
-          console.warn('[desktopApi] onOpenAiSettings listen failed:', error);
-        });
-      return () => {
-        disposed = true;
-        if (unlisten) {
-          unlisten();
-          unlisten = null;
-        }
-      };
-    },
     onStateChanged: (listener) => {
       let unlisten: (() => void) | null = null;
       let disposed = false;
@@ -480,7 +456,6 @@ function createMockAdapter(): DesktopApi {
       }
     },
     getSnapshot: async () => fallback,
-    onOpenAiSettings: () => () => undefined,
     onStateChanged: (listener) => {
       listeners.add(listener);
       return () => {

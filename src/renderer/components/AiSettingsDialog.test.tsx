@@ -40,13 +40,15 @@ describe('AiSettingsDialog', () => {
     aiApi.testConnection.mockResolvedValue({ ok: true, message: '连接成功' });
   });
 
-  it('renders saved key status without exposing a real API key', async () => {
+  it('renders a saved key as a password mask without redundant status copy', async () => {
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
     expect(await screen.findByText('AI 模型设置')).toBeInTheDocument();
-    expect(screen.getByText('API Key：已保存')).toBeInTheDocument();
+    expect(screen.queryByText('仅配置模型连接，不生成计划')).toBeNull();
+    expect(screen.queryByText('API Key：已保存')).toBeNull();
+    expect(screen.queryByText('API Key 已保存')).toBeNull();
     expect(screen.queryByText(/real-secret/i)).toBeNull();
-    expect(screen.getByLabelText('API Key')).toHaveValue('');
+    expect(screen.getByLabelText('API Key')).toHaveValue('********');
   });
 
   it('applies reasonable defaults when provider changes', async () => {
@@ -68,7 +70,7 @@ describe('AiSettingsDialog', () => {
   it('saves config with a newly typed API key', async () => {
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.change(screen.getByLabelText('API Key'), {
       target: { value: 'test-api-key' }
     });
@@ -84,22 +86,58 @@ describe('AiSettingsDialog', () => {
     });
   });
 
+  it('does not send apiKey when the saved key mask was not edited', async () => {
+    render(<AiSettingsDialog onClose={vi.fn()} />);
+
+    await screen.findByDisplayValue('********');
+    fireEvent.click(screen.getByRole('button', { name: '保存配置' }));
+
+    await waitFor(() => {
+      expect(aiApi.saveConfig).toHaveBeenCalledWith({
+        provider: 'deepseek',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-v4-flash'
+      });
+    });
+  });
+
+  it('clears the mask on focus and only sends a newly typed API key', async () => {
+    render(<AiSettingsDialog onClose={vi.fn()} />);
+
+    const input = await screen.findByDisplayValue('********');
+    fireEvent.focus(input);
+    expect(input).toHaveValue('');
+
+    fireEvent.change(input, { target: { value: 'new-secret-key' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存配置' }));
+
+    await waitFor(() => {
+      expect(aiApi.saveConfig).toHaveBeenCalledWith({
+        provider: 'deepseek',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-v4-flash',
+        apiKey: 'new-secret-key'
+      });
+    });
+  });
+
   it('clears the saved API key', async () => {
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.click(screen.getByRole('button', { name: '清除 Key' }));
 
     await waitFor(() => {
       expect(aiApi.clearApiKey).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findAllByText('未配置 API Key')).toHaveLength(2);
+    expect(screen.getByLabelText('API Key')).toHaveValue('');
+    expect(screen.queryByDisplayValue('********')).toBeNull();
   });
 
   it('shows test connection success and failure messages', async () => {
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
     expect(await screen.findByText('连接成功')).toBeInTheDocument();
 
@@ -111,7 +149,7 @@ describe('AiSettingsDialog', () => {
   it('saves current form values before testing connection', async () => {
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.change(screen.getByLabelText('服务商'), {
       target: { value: 'custom_openai_compatible' }
     });
@@ -119,6 +157,7 @@ describe('AiSettingsDialog', () => {
       target: { value: 'https://example.test/v1' }
     });
     fireEvent.change(screen.getByLabelText('模型名称'), { target: { value: 'model-x' } });
+    fireEvent.focus(screen.getByLabelText('API Key'));
     fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'new-key' } });
 
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
@@ -141,7 +180,7 @@ describe('AiSettingsDialog', () => {
     aiApi.saveConfig.mockRejectedValueOnce(new Error('Base URL 不能为空'));
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
 
@@ -157,7 +196,7 @@ describe('AiSettingsDialog', () => {
     });
     render(<AiSettingsDialog onClose={vi.fn()} />);
 
-    await screen.findByText('API Key：已保存');
+    await screen.findByDisplayValue('********');
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
     expect(
       await screen.findByText('连接失败，请检查 API Key / Base URL / 模型名称')

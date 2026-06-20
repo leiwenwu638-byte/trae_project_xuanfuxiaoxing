@@ -145,6 +145,18 @@ describe('HealthWindow', () => {
     });
   });
 
+  it('does not show the redundant sound explanation in add or edit forms', () => {
+    const copy = '每条提醒默认开启提示音；具体音源（默认 / 自定义）在顶部设置。';
+    render(<HealthWindow {...buildProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '添加提醒' }));
+    expect(screen.queryByText(copy)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '取消添加提醒' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑：定时喝水' }));
+    expect(screen.queryByText(copy)).toBeNull();
+  });
+
   it('updates the default reminder message when the interval changes before customization', () => {
     const onAdd = vi.fn();
     render(

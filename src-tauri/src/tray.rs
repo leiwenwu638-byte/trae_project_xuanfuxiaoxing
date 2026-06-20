@@ -5,7 +5,7 @@
 //! 菜单项：
 //!   - 今日计划  → 调 `open_todo_or_focus_main`，复用 main 窗口（避免双窗口）
 //!   - 健康节律  → 调 `open_or_focus_window(Health)`，复用第五阶段窗口管理
-//!   - AI 设置  → 聚焦主窗口并 emit `open-ai-settings`
+//!   - AI 设置  → 调 `open_or_focus_window(AiSettings)` 打开独立设置窗口
 //!   - ──
 //!   - 退出      → 先 `Scheduler::stop()`，再 `app.exit(0)`
 //!
@@ -29,7 +29,7 @@
 //!   - 实际托盘构建、菜单注册、退出路径不进入单测（Tauri runtime 不可桩）；
 //!     由 dev 工具 / 手动验证。
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 #[cfg(test)]
 use crate::models::ReminderPopupPayload;
@@ -75,6 +75,21 @@ pub enum MenuAction {
     OpenAiSettings,
     /// 退出应用（调度器由回调在调 [`crate::scheduler::Scheduler::stop`] 后再 exit）
     Quit,
+}
+
+#[cfg(test)]
+impl MenuAction {
+    pub fn target_window_kind(self) -> Option<WindowKind> {
+        match self {
+            Self::OpenHealth => Some(WindowKind::Health),
+            Self::OpenAiSettings => Some(WindowKind::AiSettings),
+            Self::OpenTodo | Self::Quit => None,
+        }
+    }
+
+    pub fn should_close_ai_settings_first(self) -> bool {
+        matches!(self, Self::OpenTodo)
+    }
 }
 
 /// 把菜单事件 ID 翻译成 [`MenuAction`]。未知 ID 返回 `None`。
@@ -144,8 +159,7 @@ pub fn dispatch_action(app: &AppHandle, action: MenuAction) -> tauri::Result<()>
             window_manager::open_or_focus_window(app, WindowKind::Health, None)
         }
         MenuAction::OpenAiSettings => {
-            window_manager::open_todo_or_focus_main(app)?;
-            app.emit("open-ai-settings", ())
+            window_manager::open_or_focus_window(app, WindowKind::AiSettings, None)
         }
         MenuAction::Quit => {
             // 见 fn 文档说明：实际退出路径由 lib.rs 编排。
@@ -278,6 +292,20 @@ mod tests {
             match_menu_id(menu_id::AI_SETTINGS),
             Some(MenuAction::OpenAiSettings)
         );
+    }
+
+    #[test]
+    fn ai_settings_action_targets_the_ai_settings_window() {
+        assert_eq!(
+            MenuAction::OpenAiSettings.target_window_kind(),
+            Some(WindowKind::AiSettings)
+        );
+    }
+
+    #[test]
+    fn open_todo_action_closes_ai_settings_first() {
+        assert!(MenuAction::OpenTodo.should_close_ai_settings_first());
+        assert!(!MenuAction::OpenAiSettings.should_close_ai_settings_first());
     }
 
     #[test]

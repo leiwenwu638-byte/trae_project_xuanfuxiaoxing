@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { desktopApi } from './platform/desktopApi';
 
 const mockState = vi.hoisted(() => ({
-  openAiSettingsListener: null as (() => void) | null,
   sampleSnapshot: {
     today: '2026-06-20',
     todos: [],
@@ -34,10 +34,6 @@ vi.mock('./platform/desktopApi', () => ({
   desktopApi: {
     getSnapshot: vi.fn().mockResolvedValue(mockState.sampleSnapshot),
     onStateChanged: vi.fn(() => vi.fn()),
-    onOpenAiSettings: vi.fn((listener: () => void) => {
-      mockState.openAiSettingsListener = listener;
-      return vi.fn();
-    }),
     todo: {
       addTodo: vi.fn(),
       updateTodo: vi.fn(),
@@ -71,21 +67,27 @@ vi.mock('./platform/desktopApi', () => ({
 
 describe('App AI settings tray event', () => {
   beforeEach(() => {
-    mockState.openAiSettingsListener = null;
+    window.history.pushState({}, '', '/');
+    vi.clearAllMocks();
   });
 
-  it('shows and hides AI settings when the tray event is received', async () => {
+  it('renders AI settings as a standalone page without the todo background', async () => {
+    window.history.pushState({}, '', '/?view=ai-settings');
+    render(<App />);
+
+    expect(await screen.findByText('AI 模型设置')).toBeInTheDocument();
+    expect(screen.queryByText('今日待办')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'AI 计划' })).toBeNull();
+    expect(desktopApi.getSnapshot).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(desktopApi.window.closeCurrentWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the normal todo page without AI settings for the default view', async () => {
     render(<App />);
 
     expect(await screen.findByText('今日待办')).toBeInTheDocument();
-    expect(screen.queryByText('AI 模型设置')).toBeNull();
-
-    act(() => {
-      mockState.openAiSettingsListener?.();
-    });
-
-    expect(await screen.findByText('AI 模型设置')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     await waitFor(() => {
       expect(screen.queryByText('AI 模型设置')).toBeNull();
     });

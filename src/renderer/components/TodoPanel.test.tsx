@@ -35,6 +35,10 @@ describe('TodoPanel', () => {
     };
   }
 
+  function renderedTodoTitles() {
+    return screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent);
+  }
+
   it('adds a todo with optional reminder time', () => {
     const onAdd = vi.fn();
     render(<TodoPanel {...buildProps({ onAdd })} />);
@@ -357,5 +361,142 @@ describe('TodoPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭 AI 计划' }));
     expect(screen.queryByText('AI 生成今日计划')).toBeNull();
+  });
+
+  it('sorts todos by time by default with untimed and completed tasks last', () => {
+    const mixedTodos: Todo[] = [
+      {
+        id: 'untimed',
+        title: '无提醒任务',
+        reminderTime: null,
+        soundEnabled: true,
+        completed: false,
+        priority: 'critical',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:00:00.000Z'
+      },
+      {
+        id: 'late',
+        title: '晚上任务',
+        reminderTime: '20:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'high',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:01:00.000Z'
+      },
+      {
+        id: 'early',
+        title: '上午任务',
+        reminderTime: '09:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'low',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:02:00.000Z'
+      },
+      {
+        id: 'done',
+        title: '已完成任务',
+        reminderTime: '08:00',
+        soundEnabled: true,
+        completed: true,
+        priority: 'critical',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:03:00.000Z'
+      }
+    ];
+
+    render(<TodoPanel {...buildProps({ todos: mixedTodos })} />);
+
+    expect(screen.getByLabelText('排序方式')).toHaveValue('time');
+    expect(renderedTodoTitles()).toEqual(['上午任务', '晚上任务', '无提醒任务', '已完成任务']);
+  });
+
+  it('sorts todos by priority when important sort is selected', () => {
+    const mixedTodos: Todo[] = [
+      {
+        id: 'low',
+        title: '低优先级',
+        reminderTime: '09:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'low',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:00:00.000Z'
+      },
+      {
+        id: 'critical',
+        title: '特别重要',
+        reminderTime: null,
+        soundEnabled: true,
+        completed: false,
+        priority: 'critical',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:01:00.000Z'
+      },
+      {
+        id: 'high',
+        title: '重要任务',
+        reminderTime: '20:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'high',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:02:00.000Z'
+      },
+      {
+        id: 'done',
+        title: '完成的特别重要',
+        reminderTime: '08:00',
+        soundEnabled: true,
+        completed: true,
+        priority: 'critical',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:03:00.000Z'
+      }
+    ];
+
+    render(<TodoPanel {...buildProps({ todos: mixedTodos })} />);
+
+    fireEvent.change(screen.getByLabelText('排序方式'), { target: { value: 'priority' } });
+
+    expect(renderedTodoTitles()).toEqual(['特别重要', '重要任务', '低优先级', '完成的特别重要']);
+  });
+
+  it('keeps row actions bound to todo ids after sorting', () => {
+    const onToggle = vi.fn();
+    const onDelete = vi.fn();
+    const mixedTodos: Todo[] = [
+      {
+        id: 'late-low',
+        title: '晚些低优先级',
+        reminderTime: '20:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'low',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:00:00.000Z'
+      },
+      {
+        id: 'early-high',
+        title: '较早重要任务',
+        reminderTime: '09:00',
+        soundEnabled: true,
+        completed: false,
+        priority: 'high',
+        remindedAt: null,
+        createdAt: '2026-06-10T08:01:00.000Z'
+      }
+    ];
+
+    render(<TodoPanel {...buildProps({ todos: mixedTodos, onToggle, onDelete })} />);
+    fireEvent.change(screen.getByLabelText('排序方式'), { target: { value: 'priority' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '标记完成：较早重要任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除：晚些低优先级' }));
+
+    expect(onToggle).toHaveBeenCalledWith('early-high');
+    expect(onDelete).toHaveBeenCalledWith('late-low');
   });
 });

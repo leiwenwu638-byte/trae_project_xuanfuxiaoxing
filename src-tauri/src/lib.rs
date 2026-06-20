@@ -33,7 +33,7 @@
 //!   - 复用第五阶段 `window_manager` 处理窗口相关动作。
 //!     "今日计划"通过 `open_todo_or_focus_main` 优先聚焦 main 窗口，
 //!     避免与前端 invoke `open_todo_window` 产生双窗口。
-//!   - "AI 设置"会聚焦 main 窗口并 emit `open-ai-settings`，由前端打开全局设置弹窗。
+//!   - "AI 设置"打开 label=`ai-settings` 的独立设置窗口，不叠在今日计划背景上。
 //!   - 退出菜单点击：先 `Scheduler::stop()`，再 `app.exit(0)`。
 //!   - main 窗口 `CloseRequested`：拦截 + `hide()`，让应用继续在托盘常驻；
 //!     从托盘点"今日计划"可重新打开。

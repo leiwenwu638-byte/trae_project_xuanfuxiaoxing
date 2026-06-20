@@ -29,7 +29,7 @@ AI 健康节律推荐等大功能。
 
 ## 核心功能
 
-- **今日待办**：新增 / 编辑 / 删除 / 标记完成；支持四级优先级（critical / high / medium / low）；
+- **今日待办**：新增 / 编辑 / 删除 / 标记完成；支持四级优先级（critical / high / medium / low），列表可按时间或重要程度排序；
 - **任务优先级**：列表项左侧用 `PriorityBadge` 视觉化，编辑表单内 `PrioritySelector` 切换；
 - **滚轮式提醒时间选择器（`TimeWheelPicker`）**：双列滚轮 + 键盘上下方向键，输出 `HH:mm`；
 - **今日计划提前提醒**：在任务时间前 **10 分钟**弹出 `ReminderPopup` 一次；到点不再提醒；过点不补提醒；
@@ -38,7 +38,7 @@ AI 健康节律推荐等大功能。
 - **可自定义提示音**：在"今日计划 / 健康节律"顶部点"更换"上传 wav / mp3 / ogg（≤ 5MB），
   写到 `app_data_dir/sounds/`，UI 只显示"提示音：默认 / 自定义"，不暴露底层文件名；
   两页面共用同一设置；点"恢复默认"清回默认音；
-- **AI 今日计划草稿**：系统托盘右键菜单提供"AI 设置"入口，用于配置 DeepSeek、OpenAI
+- **AI 今日计划草稿**：系统托盘右键菜单提供"AI 设置"入口，打开独立设置页面，用于配置 DeepSeek、OpenAI
   或自定义 OpenAI-compatible 接口，支持保存 / 清除 API Key、保存并测试连接；
   今日待办顶部提供"AI 计划"入口，可输入自然语言计划，由 AI 生成待办草稿，用户预览并勾选后才导入今日待办；
 - **系统托盘常驻**：托盘菜单"今日计划 / 健康节律 / AI 设置 / 退出"，未关闭窗口也可继续工作；
@@ -50,13 +50,15 @@ AI 健康节律推荐等大功能。
 AI 不会自动写入待办；模型返回结果必须先展示预览，用户点击"导入选中"后才会写入
 当天 `todos.json`。
 
-- AI 设置入口：通过系统托盘右键菜单"AI 设置"打开，只负责模型服务商、Base URL、模型名称和 API Key 配置。
+- AI 设置入口：通过系统托盘右键菜单"AI 设置"打开独立设置页面，只负责模型服务商、Base URL、模型名称和 API Key 配置。
 - AI 计划入口：在今日待办页面点击"AI 计划"打开，只负责生成今日待办草稿、预览和导入。
+- 今日计划列表支持"时间 / 重要程度"两种本地排序方式，切换排序不会写入本地 JSON。
 - 支持服务商：DeepSeek、OpenAI、自定义 OpenAI-compatible。
 - 默认 DeepSeek 配置：`baseUrl = https://api.deepseek.com`，`model = deepseek-v4-flash`。
 - 本软件不内置 API Key。API Key 由用户自行到对应平台申请并填入，属于 BYOK
   （Bring Your Own Key）模式。
 - API Key 不会显示在页面中，也不会进入 `AppSnapshot` 或普通设置 JSON。
+- API Key 已保存时，设置页输入框只显示 `********` 掩码；未输入新 Key 时不会把掩码保存为真实 Key。
 - API Key 当前保存在 Tauri `app_data_dir` 下的独立 `ai_secret.json`，与
   `ai_config.json` 分离；后续可迁移到系统凭据管理（Windows Credential Manager /
   macOS Keychain / Linux Secret Service）。

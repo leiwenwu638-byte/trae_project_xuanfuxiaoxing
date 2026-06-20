@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import type { AiProviderType, AiPublicConfig } from '../../shared/types';
 import { desktopApi } from '../platform/desktopApi';
 import { ActionButton } from './common/ActionButton';
 
 type AiSettingsDialogProps = {
   onClose: () => void;
+  mode?: 'modal' | 'page';
 };
 
 const PROVIDER_LABELS: Record<AiProviderType, string> = {
@@ -36,12 +37,14 @@ const DEFAULT_CONFIG: AiPublicConfig = {
   apiKeySaved: false
 };
 
+const MASKED_API_KEY = '********';
+
 type StatusTone = 'muted' | 'success' | 'error';
 
 function statusClass(tone: StatusTone): string {
-  if (tone === 'success') return 'border-assistant-success/30 bg-green-50 text-assistant-success';
-  if (tone === 'error') return 'border-assistant-warning/30 bg-orange-50 text-assistant-warning';
-  return 'border-assistant-line bg-assistant-wash text-assistant-muted';
+  if (tone === 'success') return 'text-assistant-success';
+  if (tone === 'error') return 'text-assistant-warning';
+  return 'text-assistant-muted';
 }
 
 function normalizeError(error: unknown): string {
@@ -50,12 +53,13 @@ function normalizeError(error: unknown): string {
   return '操作失败，请稍后重试';
 }
 
-export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
+export function AiSettingsDialog({ onClose, mode = 'modal' }: AiSettingsDialogProps) {
   const [provider, setProvider] = useState<AiProviderType>(DEFAULT_CONFIG.provider);
   const [baseUrl, setBaseUrl] = useState(DEFAULT_CONFIG.baseUrl);
   const [model, setModel] = useState(DEFAULT_CONFIG.model);
   const [apiKeySaved, setApiKeySaved] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -73,7 +77,9 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
         setBaseUrl(config.baseUrl);
         setModel(config.model);
         setApiKeySaved(config.apiKeySaved);
-        setMessage(config.apiKeySaved ? 'API Key 已保存' : '未配置 API Key');
+        setApiKeyDraft('');
+        setApiKeyDirty(false);
+        setMessage('');
         setTone('muted');
       })
       .catch((error) => {
@@ -90,27 +96,22 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
     };
   }, []);
 
-  const keyStatus = useMemo(
-    () => (apiKeySaved ? 'API Key：已保存' : '未配置 API Key'),
-    [apiKeySaved]
-  );
-
   function changeProvider(nextProvider: AiProviderType) {
     const defaults = PROVIDER_DEFAULTS[nextProvider];
     setProvider(nextProvider);
     setBaseUrl(defaults.baseUrl);
     setModel(defaults.model);
-    setMessage(apiKeySaved ? 'API Key 已保存' : '未配置 API Key');
+    setMessage('');
     setTone('muted');
   }
 
   function currentSaveInput() {
-    const trimmedKey = apiKey.trim();
+    const trimmedKey = apiKeyDraft.trim();
     return {
       provider,
       baseUrl: baseUrl.trim(),
       model: model.trim(),
-      ...(trimmedKey ? { apiKey: trimmedKey } : {})
+      ...(apiKeyDirty && trimmedKey ? { apiKey: trimmedKey } : {})
     };
   }
 
@@ -119,7 +120,8 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
     setBaseUrl(config.baseUrl);
     setModel(config.model);
     setApiKeySaved(config.apiKeySaved);
-    setApiKey('');
+    setApiKeyDraft('');
+    setApiKeyDirty(false);
   }
 
   async function saveConfig(event?: FormEvent) {
@@ -150,8 +152,9 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
       setBaseUrl(config.baseUrl);
       setModel(config.model);
       setApiKeySaved(config.apiKeySaved);
-      setApiKey('');
-      setMessage('未配置 API Key');
+      setApiKeyDraft('');
+      setApiKeyDirty(false);
+      setMessage('API Key 已清除');
       setTone('muted');
     } catch (error) {
       setMessage(normalizeError(error));
@@ -180,6 +183,112 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
   }
 
   const busy = loading || saving || testing;
+  const apiKeyDisplayValue = apiKeySaved && !apiKeyDirty ? MASKED_API_KEY : apiKeyDraft;
+
+  const form = (
+    <form
+      className="w-full max-w-[360px] rounded-lg border border-assistant-line bg-white p-4 shadow-xl"
+      onSubmit={saveConfig}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-assistant-ink">AI 模型设置</h2>
+        <ActionButton disabled={busy} variant="ghost" size="sm" onClick={onClose}>
+          关闭
+        </ActionButton>
+      </div>
+
+      <div className="space-y-3">
+        <label className="block text-[11px] text-assistant-muted">
+          服务商
+          <select
+            aria-label="服务商"
+            className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
+            disabled={busy}
+            value={provider}
+            onChange={(event) => changeProvider(event.target.value as AiProviderType)}
+          >
+            {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block text-[11px] text-assistant-muted">
+          Base URL
+          <input
+            aria-label="Base URL"
+            className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
+            disabled={busy}
+            value={baseUrl}
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+        </label>
+
+        <label className="block text-[11px] text-assistant-muted">
+          模型名称
+          <input
+            aria-label="模型名称"
+            className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
+            disabled={busy}
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+          />
+        </label>
+
+        <label className="block text-[11px] text-assistant-muted">
+          API Key
+          <input
+            aria-label="API Key"
+            autoComplete="off"
+            className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
+            disabled={busy}
+            placeholder="输入 API Key"
+            type="password"
+            value={apiKeyDisplayValue}
+            onFocus={() => {
+              if (apiKeySaved && !apiKeyDirty) {
+                setApiKeyDraft('');
+                setApiKeyDirty(true);
+              }
+            }}
+            onChange={(event) => {
+              setApiKeyDirty(true);
+              setApiKeyDraft(event.target.value);
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <ActionButton
+          disabled={busy}
+          variant="muted"
+          size="sm"
+          onClick={saveAndTestConnection}
+        >
+          {testing ? '保存并测试中...' : '保存并测试'}
+        </ActionButton>
+        <ActionButton disabled={busy || !apiKeySaved} variant="danger" size="sm" onClick={clearApiKey}>
+          清除 Key
+        </ActionButton>
+        <ActionButton disabled={busy} variant="primary" size="sm" type="submit">
+          保存配置
+        </ActionButton>
+      </div>
+
+      {message ? (
+        <p className={`mt-2 text-right text-[11px] ${statusClass(tone)}`} role={tone === 'error' ? 'alert' : 'status'}>
+          {message}
+        </p>
+      ) : null}
+    </form>
+  );
+
+  if (mode === 'page') {
+    return form;
+  }
 
   return (
     <div
@@ -187,99 +296,7 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 px-4"
       role="dialog"
     >
-      <form
-        className="w-full max-w-[360px] rounded-lg border border-assistant-line bg-white p-4 shadow-xl"
-        onSubmit={saveConfig}
-      >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-[15px] font-semibold text-assistant-ink">AI 模型设置</h2>
-            <p className="mt-0.5 text-[11px] text-assistant-muted">仅配置模型连接，不生成计划</p>
-          </div>
-          <ActionButton disabled={busy} variant="ghost" size="sm" onClick={onClose}>
-            关闭
-          </ActionButton>
-        </div>
-
-        <div className="space-y-3">
-          <label className="block text-[11px] text-assistant-muted">
-            服务商
-            <select
-              aria-label="服务商"
-              className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
-              disabled={busy}
-              value={provider}
-              onChange={(event) => changeProvider(event.target.value as AiProviderType)}
-            >
-              {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block text-[11px] text-assistant-muted">
-            Base URL
-            <input
-              aria-label="Base URL"
-              className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
-              disabled={busy}
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          </label>
-
-          <label className="block text-[11px] text-assistant-muted">
-            模型名称
-            <input
-              aria-label="模型名称"
-              className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
-              disabled={busy}
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-            />
-          </label>
-
-          <div className="space-y-1.5">
-            <div className="text-[11px] text-assistant-muted">{keyStatus}</div>
-            <label className="block text-[11px] text-assistant-muted">
-              API Key
-              <input
-                aria-label="API Key"
-                autoComplete="off"
-                className="mt-1 h-8 w-full rounded-md border border-assistant-line bg-white px-2 text-[13px] text-assistant-ink outline-none focus:border-assistant-accent/70"
-                disabled={busy}
-                placeholder={apiKeySaved ? '输入新的 API Key 后保存' : '输入 API Key'}
-                type="password"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-            </label>
-          </div>
-
-          <p className={`rounded-md border px-2 py-1.5 text-[11px] ${statusClass(tone)}`}>
-            {message}
-          </p>
-        </div>
-
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <ActionButton
-            disabled={busy}
-            variant="muted"
-            size="sm"
-            onClick={saveAndTestConnection}
-          >
-            {testing ? '保存并测试中...' : '保存并测试'}
-          </ActionButton>
-          <ActionButton disabled={busy || !apiKeySaved} variant="danger" size="sm" onClick={clearApiKey}>
-            清除 Key
-          </ActionButton>
-          <ActionButton disabled={busy} variant="primary" size="sm" type="submit">
-            保存配置
-          </ActionButton>
-        </div>
-      </form>
+      {form}
     </div>
   );
 }

@@ -54,9 +54,9 @@ export function App() {
   // deleteReminder / toggleTodo / toggleReminder）失败时设置，下次 snapshot 广播
   // 或 5s 自动清除。
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [showAiSettings, setShowAiSettings] = useState(false);
   const [now, setNow] = useState(new Date());
   const view = new URLSearchParams(window.location.search).get('view') ?? 'todo';
+  const needsSnapshot = view !== 'popup' && view !== 'ai-settings';
 
   const loadSnapshot = useCallback(async () => {
     setState({ kind: 'loading' });
@@ -84,15 +84,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!needsSnapshot) return undefined;
     void loadSnapshot();
     return desktopApi.onStateChanged((snapshot) => {
       // 调度器 emit 状态变化时，直接替换（不会出现"error 态被覆盖"的情况，
       // 因为这里只在已 ready 之后才被调用——emit 由 Rust 端在 tick 成功后发出）。
       setState({ kind: 'ready', snapshot });
     });
-  }, [loadSnapshot]);
-
-  useEffect(() => desktopApi.onOpenAiSettings(() => setShowAiSettings(true)), []);
+  }, [loadSnapshot, needsSnapshot]);
 
   // IPC 调用的统一 snapshot setter：成功路径走这里，错误由 `loadSnapshot` 单独处理。
   // 必须放在 useEffect 之后、`return <TodoPanel/>` 之前，因为 JSX 内的回调
@@ -229,6 +228,17 @@ export function App() {
     );
   }
 
+  if (view === 'ai-settings') {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white p-4 text-[13px] text-assistant-ink">
+        <AiSettingsDialog
+          mode="page"
+          onClose={() => void desktopApi.window.closeCurrentWindow()}
+        />
+      </div>
+    );
+  }
+
   // 弹窗之外的窗口都需要 snapshot：先按状态分派 UI。
   if (state.kind === 'loading') {
     return <LoadingScreen label="正在加载今日计划..." />;
@@ -238,14 +248,10 @@ export function App() {
   }
 
   const snapshot = state.snapshot;
-  const aiSettingsDialog = showAiSettings ? (
-    <AiSettingsDialog onClose={() => setShowAiSettings(false)} />
-  ) : null;
 
   if (view === 'health') {
     return (
       <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
-        {aiSettingsDialog}
         {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
         <div className="min-h-0 flex-1">
           <HealthWindow
@@ -287,7 +293,6 @@ export function App() {
   // 默认（也包括历史上的 'ball' / 其它非法 view）：渲染 TodoPanel。
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
-      {aiSettingsDialog}
       {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
       <div className="min-h-0 flex-1">
         <TodoPanel

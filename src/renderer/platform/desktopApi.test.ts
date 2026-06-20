@@ -467,23 +467,6 @@ describe('desktopApi', () => {
       expect(unlisten).toHaveBeenCalledTimes(1);
     });
 
-    it('listens for the tray open-ai-settings event', async () => {
-      const invoke = vi.fn().mockResolvedValue(sampleSnapshot);
-      const unlisten = vi.fn();
-      const listen = vi.fn().mockResolvedValue(unlisten);
-      vi.doMock('@tauri-apps/api/core', () => ({ invoke }));
-      vi.doMock('@tauri-apps/api/event', () => ({ listen }));
-
-      const desktopApi = await loadDesktopApi();
-      const handler = vi.fn();
-      const unsubscribe = desktopApi.onOpenAiSettings(handler);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      unsubscribe();
-
-      expect(listen).toHaveBeenCalledWith('open-ai-settings', expect.any(Function));
-      expect(unlisten).toHaveBeenCalledTimes(1);
-    });
-
     it('calls unlisten if listen resolves after unsubscribe', async () => {
       let resolveListen: (unlisten: () => void) => void = () => undefined;
       const unlisten = vi.fn();

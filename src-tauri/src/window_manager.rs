@@ -1,6 +1,6 @@
 //! Tauri 窗口管理
 //!
-//! 集中维护三类窗口（Todo / Health / ReminderPopup）的配置和行为，
+//! 集中维护业务窗口（Todo / Health / AiSettings / ReminderPopup）的配置和行为，
 //! 避免散落在 `commands.rs` 里的字符串字面量。
 //!
 //! 主要职责：
@@ -19,11 +19,13 @@
 //!   |-----------------|---------|-------------|-------------|-------------|-------------|
 //!   | Todo            | 800x600 | false       | true        | false       | true        |
 //!   | Health          | 380x600 | true        | false       | false       | true        |
+//!   | AiSettings      | 400x520 | true        | false       | false       | true        |
 //!   | ReminderPopup   | 320x180 | false       | true        | true        | true        |
 //!
 //! URL 路由与 `src/renderer/App.tsx` 的 `?view=` 共享：
 //!   - `?view=todo`    → 今日待办
 //!   - `?view=health`  → 健康窗口
+//!   - `?view=ai-settings` → AI 设置
 //!   - `?view=popup`   → 提醒弹窗
 //!
 //! 弹窗 payload 通过 `WebviewWindowBuilder::initialization_script` 注入到
@@ -49,7 +51,7 @@ use crate::models::ReminderPopupPayload;
 // 窗口类型与配置
 // ---------------------------------------------------------------------------
 
-/// 业务上识别三类窗口。
+/// 业务上识别四类窗口。
 ///
 /// 不同的 WindowKind 对应不同的 label / title / url / size / 装饰 / 透明 / 置顶。
 ///
@@ -64,6 +66,8 @@ pub enum WindowKind {
     Todo,
     /// 健康提醒窗口。题目要求："悬浮小醒 - 健康节律"，380x600。
     Health,
+    /// AI 模型设置窗口。
+    AiSettings,
     /// 提醒弹窗。题目要求：轻量、置顶、无边框、跳过任务栏。
     ReminderPopup,
 }
@@ -73,6 +77,7 @@ impl WindowKind {
         match self {
             Self::Todo => "todo",
             Self::Health => "health",
+            Self::AiSettings => "ai-settings",
             Self::ReminderPopup => "reminder-popup",
         }
     }
@@ -81,6 +86,7 @@ impl WindowKind {
         match self {
             Self::Todo => "悬浮小醒 - 今日计划",
             Self::Health => "悬浮小醒 - 健康节律",
+            Self::AiSettings => "悬浮小醒 - AI 设置",
             Self::ReminderPopup => "悬浮小醒 - 提醒",
         }
     }
@@ -90,6 +96,7 @@ impl WindowKind {
         match self {
             Self::Todo => "index.html?view=todo",
             Self::Health => "index.html?view=health",
+            Self::AiSettings => "index.html?view=ai-settings",
             Self::ReminderPopup => "index.html?view=popup",
         }
     }
@@ -101,6 +108,7 @@ impl WindowKind {
             // 建独立 todo 窗口"，与 main 同尺寸避免视觉跳跃。
             Self::Todo => (400.0, 600.0),
             Self::Health => (380.0, 600.0),
+            Self::AiSettings => (400.0, 520.0),
             Self::ReminderPopup => (320.0, 180.0),
         }
     }
@@ -111,6 +119,7 @@ impl WindowKind {
             // （main 是无边框轻量工具窗体验，但兜底场景不该是这种形态）
             Self::Todo => true,
             Self::Health => true,
+            Self::AiSettings => true,
             Self::ReminderPopup => false,
         }
     }
@@ -121,6 +130,7 @@ impl WindowKind {
             // 看起来很奇怪（透明 + 装饰 = 半透明装饰边框）。
             Self::Todo => false,
             Self::Health => false,
+            Self::AiSettings => false,
             Self::ReminderPopup => true,
         }
     }
@@ -129,6 +139,7 @@ impl WindowKind {
         match self {
             Self::Todo => false,
             Self::Health => false,
+            Self::AiSettings => false,
             Self::ReminderPopup => true,
         }
     }
@@ -144,6 +155,7 @@ impl WindowKind {
             // Todo 兜底窗可调整：用户从"无 main 状态"恢复时通常需要更大区域。
             Self::Todo => true,
             Self::Health => true,
+            Self::AiSettings => false,
             Self::ReminderPopup => false,
         }
     }
@@ -198,6 +210,7 @@ pub fn open_or_focus_window(
 /// 必须保持两条路径走同一份代码——这样不会出现"前端开一份、托盘开一份"的
 /// 双窗口问题；任何"今天待办"进入都只会落到 main（或 fallback 到 todo）。
 pub fn open_todo_or_focus_main(app: &AppHandle) -> TauriResult<()> {
+    let _ = close_window(app, WindowKind::AiSettings.label());
     if let Some(main) = app.get_webview_window("main") {
         // 与 open_or_focus_window 内部一致：show + unminimize + set_focus
         // 各自吞错，阻挡其中一项失败不应影响其他动作。
@@ -466,6 +479,7 @@ mod tests {
         let kinds = [
             WindowKind::Todo,
             WindowKind::Health,
+            WindowKind::AiSettings,
             WindowKind::ReminderPopup,
         ];
         let mut labels: Vec<&str> = kinds.iter().map(|k| k.label()).collect();
@@ -506,10 +520,23 @@ mod tests {
     }
 
     #[test]
+    fn ai_settings_window_config_is_stable() {
+        assert_eq!(WindowKind::AiSettings.label(), "ai-settings");
+        assert_eq!(WindowKind::AiSettings.title(), "悬浮小醒 - AI 设置");
+        assert_eq!(WindowKind::AiSettings.url(), "index.html?view=ai-settings");
+        assert_eq!(WindowKind::AiSettings.size(), (400.0, 520.0));
+        assert!(WindowKind::AiSettings.decorations());
+        assert!(!WindowKind::AiSettings.transparent());
+        assert!(!WindowKind::AiSettings.always_on_top());
+        assert!(WindowKind::AiSettings.skip_taskbar());
+    }
+
+    #[test]
     fn urls_contain_view_param() {
         for kind in [
             WindowKind::Todo,
             WindowKind::Health,
+            WindowKind::AiSettings,
             WindowKind::ReminderPopup,
         ] {
             assert!(

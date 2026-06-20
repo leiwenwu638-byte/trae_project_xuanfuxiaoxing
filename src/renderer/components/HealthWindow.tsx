@@ -233,23 +233,18 @@ export function HealthWindow({
                 }}
               />
             </label>
-            <div className="grid grid-cols-1 items-end gap-2">
-              <label className="block text-[11px] text-assistant-muted">
-                间隔分钟
-                <input
-                  aria-label="间隔分钟"
-                  className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-                  max={480}
-                  min={5}
-                  type="number"
-                  value={intervalMinutes}
-                  onChange={(event) => updateAddInterval(event.target.value)}
-                />
-              </label>
-              <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
-                每条提醒默认开启提示音；具体音源（默认 / 自定义）在顶部设置。
-              </p>
-            </div>
+            <label className="block text-[11px] text-assistant-muted">
+              间隔分钟
+              <input
+                aria-label="间隔分钟"
+                className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
+                max={480}
+                min={5}
+                type="number"
+                value={intervalMinutes}
+                onChange={(event) => updateAddInterval(event.target.value)}
+              />
+            </label>
             <label className="block text-[11px] text-assistant-muted">
               提醒内容
               <textarea
@@ -397,23 +392,18 @@ export function HealthWindow({
                         }}
                       />
                     </label>
-                    <div className="grid grid-cols-1 items-end gap-2">
-                      <label className="block text-[11px] text-assistant-muted">
-                        修改间隔分钟
-                        <input
-                          aria-label="修改间隔分钟"
-                          className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
-                          max={480}
-                          min={5}
-                          type="number"
-                          value={editIntervalMinutes}
-                          onChange={(event) => updateEditInterval(event.target.value)}
-                        />
-                      </label>
-                      <p className="rounded-md border border-dashed border-assistant-line bg-assistant-wash/40 px-2 py-1.5 text-[11px] text-assistant-muted">
-                        每条提醒默认开启提示音；具体音源（默认 / 自定义）在顶部设置。
-                      </p>
-                    </div>
+                    <label className="block text-[11px] text-assistant-muted">
+                      修改间隔分钟
+                      <input
+                        aria-label="修改间隔分钟"
+                        className="mt-1 w-full rounded-md border border-assistant-line bg-white px-2 py-1.5 text-[13px] text-assistant-ink"
+                        max={480}
+                        min={5}
+                        type="number"
+                        value={editIntervalMinutes}
+                        onChange={(event) => updateEditInterval(event.target.value)}
+                      />
+                    </label>
                     <label className="block text-[11px] text-assistant-muted">
                       修改提醒内容
                       <textarea
