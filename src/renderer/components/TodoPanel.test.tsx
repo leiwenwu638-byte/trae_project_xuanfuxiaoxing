@@ -331,4 +331,12 @@ describe('TodoPanel', () => {
     expect(onSelectSound).toHaveBeenCalledTimes(1);
     expect(onSelectSound.mock.calls[0][0]).toBe(file);
   });
+
+  it('opens AI settings from the title area', async () => {
+    render(<TodoPanel {...buildProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI 设置' }));
+
+    expect(await screen.findByText('AI 模型设置')).toBeInTheDocument();
+  });
 });

@@ -41,6 +41,41 @@ pub enum TodoPriority {
     Low,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProviderType {
+    Deepseek,
+    Openai,
+    CustomOpenaiCompatible,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiPublicConfig {
+    pub enabled: bool,
+    pub provider: AiProviderType,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_saved: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveAiConfigInput {
+    pub provider: AiProviderType,
+    pub base_url: String,
+    pub model: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiConnectionTestResult {
+    pub ok: bool,
+    pub message: String,
+}
+
 // ---------------------------------------------------------------------------
 // 1. Todo
 // ---------------------------------------------------------------------------

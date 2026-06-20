@@ -2,9 +2,12 @@ import { createDefaultHealthReminders, createDefaultSettings } from '../../share
 import type {
   AddHealthReminderInput,
   AddTodoInput,
+  AiConnectionTestResult,
+  AiPublicConfig,
   AppSettings,
   AppSnapshot,
   HealthReminder,
+  SaveAiConfigInput,
   Todo,
   UpdateHealthReminderInput,
   UpdateTodoInput
@@ -96,6 +99,13 @@ export interface DesktopSchedulerApi {
   stop(): Promise<void>;
 }
 
+export interface DesktopAiApi {
+  getConfig(): Promise<AiPublicConfig>;
+  saveConfig(input: SaveAiConfigInput): Promise<AiPublicConfig>;
+  clearApiKey(): Promise<AiPublicConfig>;
+  testConnection(): Promise<AiConnectionTestResult>;
+}
+
 export interface DesktopApi {
   readonly platform: 'tauri' | 'mock';
   todo: DesktopTodoApi;
@@ -104,6 +114,7 @@ export interface DesktopApi {
   window: DesktopWindowApi;
   notification: DesktopNotificationApi;
   scheduler: DesktopSchedulerApi;
+  ai: DesktopAiApi;
   getSnapshot(): Promise<AppSnapshot>;
   onStateChanged(listener: StateChangeListener): () => void;
 }
@@ -129,6 +140,16 @@ function createDefaultSnapshot(): AppSnapshot {
     todos: [],
     reminders: createDefaultHealthReminders(),
     settings: createDefaultSettings()
+  };
+}
+
+function createDefaultAiConfig(): AiPublicConfig {
+  return {
+    enabled: false,
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-v4-flash',
+    apiKeySaved: false
   };
 }
 
@@ -187,7 +208,11 @@ export const REQUIRED_TAURI_COMMANDS_FOR_TEST = new Set<string>([
   'hide_current_window',
   'get_scheduler_status',
   'start_scheduler',
-  'stop_scheduler'
+  'stop_scheduler',
+  'get_ai_config',
+  'save_ai_config',
+  'clear_ai_api_key',
+  'test_ai_connection'
 ]);
 
 function createTauriAdapter(): DesktopApi {
@@ -278,6 +303,12 @@ function createTauriAdapter(): DesktopApi {
       start: () => coreInvoke<void>('start_scheduler'),
       stop: () => coreInvoke<void>('stop_scheduler')
     },
+    ai: {
+      getConfig: () => coreInvoke<AiPublicConfig>('get_ai_config'),
+      saveConfig: (input) => coreInvoke<AiPublicConfig>('save_ai_config', { input }),
+      clearApiKey: () => coreInvoke<AiPublicConfig>('clear_ai_api_key'),
+      testConnection: () => coreInvoke<AiConnectionTestResult>('test_ai_connection')
+    },
     getSnapshot: () => coreInvoke<AppSnapshot>('get_snapshot'),
     onStateChanged: (listener) => {
       let unlisten: (() => void) | null = null;
@@ -306,6 +337,7 @@ function createTauriAdapter(): DesktopApi {
 
 function createMockAdapter(): DesktopApi {
   const fallback = createDefaultSnapshot();
+  let aiConfig = createDefaultAiConfig();
   const listeners = new Set<StateChangeListener>();
 
   const noop = async (): Promise<void> => undefined;
@@ -354,6 +386,27 @@ function createMockAdapter(): DesktopApi {
       getStatus: async () => ({ running: false, tickIntervalSecs: 0, pendingPopupCount: 0 }),
       start: noop,
       stop: noop
+    },
+    ai: {
+      getConfig: async () => aiConfig,
+      saveConfig: async (input) => {
+        aiConfig = {
+          enabled: Boolean(input.apiKey || aiConfig.apiKeySaved),
+          provider: input.provider,
+          baseUrl: input.baseUrl,
+          model: input.model,
+          apiKeySaved: Boolean(input.apiKey || aiConfig.apiKeySaved)
+        };
+        return aiConfig;
+      },
+      clearApiKey: async () => {
+        aiConfig = { ...aiConfig, enabled: false, apiKeySaved: false };
+        return aiConfig;
+      },
+      testConnection: async () =>
+        aiConfig.apiKeySaved
+          ? { ok: true, message: '连接成功' }
+          : { ok: false, message: '未配置 API Key' }
     },
     getSnapshot: async () => fallback,
     onStateChanged: (listener) => {

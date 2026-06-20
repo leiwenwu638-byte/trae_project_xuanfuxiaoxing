@@ -37,8 +37,22 @@
 - **可自定义提示音**：在"今日计划 / 健康节律"顶部点"更换"上传 wav / mp3 / ogg（≤ 5MB），
   写到 `app_data_dir/sounds/`，UI 只显示"提示音：默认 / 自定义"，不暴露底层文件名；
   两页面共用同一设置；点"恢复默认"清回默认音；
+- **AI 模型设置（第一阶段）**：今日计划顶部提供"AI 设置"入口，可配置 DeepSeek、OpenAI
+  或自定义 OpenAI-compatible 接口，支持保存 / 清除 API Key 和测试连接；本阶段不生成今日计划；
 - **系统托盘常驻**：托盘菜单"今日计划 / 健康节律 / 显示提醒测试 / 退出"，未关闭窗口也可继续工作；
 - **本地 JSON 持久化**：所有数据落盘 `app_data_dir`，无任何云端依赖。
+
+## AI 设置说明
+
+当前 AI 功能仅完成第一阶段：模型配置和连接测试。暂未实现 AI 生成今日计划、AI 聊天、
+AI 健康节律推荐，也不会自动写入待办。
+
+- 支持服务商：DeepSeek、OpenAI、自定义 OpenAI-compatible。
+- 默认 DeepSeek 配置：`baseUrl = https://api.deepseek.com`，`model = deepseek-v4-flash`。
+- 本软件不内置 API Key。API Key 由用户自行到对应平台申请并填入，属于 BYOK
+  （Bring Your Own Key）模式。
+- API Key 不会显示在页面中，也不会进入 `AppSnapshot` 或普通设置 JSON。
+- 不要把 API Key 写入源码、README、`.env` 后提交到 GitHub。
 
 ## 本地运行
 

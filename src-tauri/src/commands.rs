@@ -33,11 +33,12 @@ use chrono::{DateTime, Local};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+use crate::ai;
 use crate::models::{
     add_minutes, create_default_health_reminders, default_app_settings, local_date_key, to_hhmm,
-    to_iso, AddHealthReminderInput, AddTodoInput, AppSettings, AppSnapshot, HealthReminder,
-    ReminderPopupPayload, Todo, TodoStore, UpdateHealthReminderInput, UpdateSettingsInput,
-    UpdateTodoInput,
+    to_iso, AddHealthReminderInput, AddTodoInput, AiConnectionTestResult, AiPublicConfig,
+    AppSettings, AppSnapshot, HealthReminder, ReminderPopupPayload, SaveAiConfigInput, Todo,
+    TodoStore, UpdateHealthReminderInput, UpdateSettingsInput, UpdateTodoInput,
 };
 use crate::scheduler::{Scheduler, SchedulerStatus};
 use crate::state::AppState;
@@ -439,6 +440,26 @@ fn merge_settings(target: &AppSettings, input: &UpdateSettingsInput) -> AppSetti
 /// 限制理由：Tauri `invoke` 同步传 bytes 走的是 IPC；太大（比如 100MB）会
 /// 阻塞主线程、且会显著延长 getSnapshot 等其它命令的响应时间。提示音一般
 /// 1-2 秒 wav 也就几十 KB，5MB 已经远超日常需求。
+#[tauri::command]
+pub fn get_ai_config(app: AppHandle) -> CmdResult<AiPublicConfig> {
+    ai::get_config(&app)
+}
+
+#[tauri::command]
+pub fn save_ai_config(app: AppHandle, input: SaveAiConfigInput) -> CmdResult<AiPublicConfig> {
+    ai::save_config(&app, input)
+}
+
+#[tauri::command]
+pub fn clear_ai_api_key(app: AppHandle) -> CmdResult<AiPublicConfig> {
+    ai::clear_api_key(&app)
+}
+
+#[tauri::command]
+pub async fn test_ai_connection(app: AppHandle) -> CmdResult<AiConnectionTestResult> {
+    ai::test_connection(&app).await
+}
+
 pub const MAX_CUSTOM_SOUND_BYTES: usize = 5 * 1024 * 1024;
 
 /// 允许的扩展名。`wav / mp3 / ogg` 覆盖所有主流浏览器 / WebView 原生支持的

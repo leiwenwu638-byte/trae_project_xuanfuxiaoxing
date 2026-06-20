@@ -20,6 +20,9 @@ desktop.ini
 .env
 .env.local
 .env.*.local
+ai_secret.json
+ai_config.local.json
+*.api-key
 
 # Logs
 logs/

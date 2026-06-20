@@ -1,4 +1,4 @@
-import { Check, Clock, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, Clock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import type {
   AddTodoInput,
@@ -8,6 +8,7 @@ import type {
 } from '../../shared/types';
 import { TODO_PRIORITY_DEFAULT } from '../../shared/types';
 import { ActionButton } from './common/ActionButton';
+import { AiSettingsDialog } from './AiSettingsDialog';
 import { PriorityBadge, PrioritySelector } from './PrioritySelector';
 import { SoundSettingsBar } from './SoundSettingsBar';
 import { TimeWheelPicker } from './TimeWheelPicker';
@@ -67,6 +68,7 @@ export function TodoPanel({
   const [editPriority, setEditPriority] = useState<TodoPriority>(TODO_PRIORITY_DEFAULT);
   const [editError, setEditError] = useState('');
   const [editTimePulse, setEditTimePulse] = useState(false);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!timePulse) return;
@@ -162,7 +164,15 @@ export function TodoPanel({
                 : '今日全部完成'}
           </p>
         </div>
-        <div className="no-drag flex flex-none items-center">
+        <div className="no-drag flex flex-none items-center gap-2">
+          <ActionButton
+            variant="muted"
+            size="sm"
+            icon={<Sparkles size={12} />}
+            onClick={() => setAiSettingsOpen(true)}
+          >
+            AI 设置
+          </ActionButton>
           <ActionButton
             variant="muted"
             size="icon"
@@ -172,6 +182,8 @@ export function TodoPanel({
           />
         </div>
       </header>
+
+      {aiSettingsOpen ? <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} /> : null}
 
       <SoundSettingsBar
         soundFilePath={soundFilePath}

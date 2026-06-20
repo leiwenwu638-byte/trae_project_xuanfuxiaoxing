@@ -51,6 +51,7 @@
 //! 数据契约：所有 command 返回的 JSON 字段名与前端 `src/shared/types.ts` 一致
 //! （依赖 `models.rs` 的 `#[serde(rename_all = "camelCase")]`）。
 
+mod ai;
 mod commands;
 mod models;
 mod scheduler;
@@ -131,6 +132,10 @@ pub fn run() {
             commands::toggle_reminder,
             commands::get_settings,
             commands::update_settings,
+            commands::get_ai_config,
+            commands::save_ai_config,
+            commands::clear_ai_api_key,
+            commands::test_ai_connection,
             // 第十二阶段：自定义提示音文件落盘。
             // 前端 `desktopApi.saveCustomSound(name, bytes)` → 把音频写到
             // `<app_data_dir>/sounds/<safe_name>`，返回真实绝对路径。

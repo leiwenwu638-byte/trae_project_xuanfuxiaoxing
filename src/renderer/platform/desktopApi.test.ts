@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppSettings, AppSnapshot } from '../../shared/types';
+import type { AiPublicConfig, AppSettings, AppSnapshot } from '../../shared/types';
 
 const sampleSettings: AppSettings = {
   general: {
@@ -19,6 +19,14 @@ const sampleSnapshot: AppSnapshot = {
   todos: [],
   reminders: [],
   settings: sampleSettings
+};
+
+const sampleAiConfig: AiPublicConfig = {
+  enabled: true,
+  provider: 'deepseek',
+  baseUrl: 'https://api.deepseek.com',
+  model: 'deepseek-v4-flash',
+  apiKeySaved: true
 };
 
 function clearPlatformMarkers(): void {
@@ -116,6 +124,37 @@ describe('desktopApi', () => {
       });
       await expect(desktopApi.scheduler.start()).resolves.toBeUndefined();
       await expect(desktopApi.scheduler.stop()).resolves.toBeUndefined();
+    });
+
+    it('provides AI config methods without exposing an API key', async () => {
+      clearPlatformMarkers();
+      const desktopApi = await loadDesktopApi();
+
+      await expect(desktopApi.ai.getConfig()).resolves.toEqual({
+        enabled: false,
+        provider: 'deepseek',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-v4-flash',
+        apiKeySaved: false
+      });
+
+      const saved = await desktopApi.ai.saveConfig({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-test',
+        apiKey: 'test-api-key'
+      });
+      expect(saved).toMatchObject({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-test',
+        apiKeySaved: true
+      });
+      expect(JSON.stringify(saved)).not.toContain('test-api-key');
+
+      await expect(desktopApi.ai.clearApiKey()).resolves.toMatchObject({
+        apiKeySaved: false
+      });
     });
   });
 
@@ -226,6 +265,39 @@ describe('desktopApi', () => {
       expect(invoke).toHaveBeenNthCalledWith(1, 'get_scheduler_status');
       expect(invoke).toHaveBeenNthCalledWith(2, 'start_scheduler');
       expect(invoke).toHaveBeenNthCalledWith(3, 'stop_scheduler');
+    });
+
+    it('AI commands call matching Tauri commands', async () => {
+      const invoke = vi
+        .fn()
+        .mockResolvedValueOnce(sampleAiConfig)
+        .mockResolvedValueOnce(sampleAiConfig)
+        .mockResolvedValueOnce({ ...sampleAiConfig, apiKeySaved: false })
+        .mockResolvedValueOnce({ ok: true, message: '连接成功' });
+      vi.doMock('@tauri-apps/api/core', () => ({ invoke }));
+
+      const desktopApi = await loadDesktopApi();
+      const input = {
+        provider: 'deepseek' as const,
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-v4-flash',
+        apiKey: 'test-api-key'
+      };
+
+      await expect(desktopApi.ai.getConfig()).resolves.toBe(sampleAiConfig);
+      await expect(desktopApi.ai.saveConfig(input)).resolves.toBe(sampleAiConfig);
+      await expect(desktopApi.ai.clearApiKey()).resolves.toMatchObject({
+        apiKeySaved: false
+      });
+      await expect(desktopApi.ai.testConnection()).resolves.toEqual({
+        ok: true,
+        message: '连接成功'
+      });
+
+      expect(invoke).toHaveBeenNthCalledWith(1, 'get_ai_config');
+      expect(invoke).toHaveBeenNthCalledWith(2, 'save_ai_config', { input });
+      expect(invoke).toHaveBeenNthCalledWith(3, 'clear_ai_api_key');
+      expect(invoke).toHaveBeenNthCalledWith(4, 'test_ai_connection');
     });
   });
 
@@ -411,7 +483,11 @@ describe('desktopApi', () => {
         'hide_current_window',
         'get_scheduler_status',
         'start_scheduler',
-        'stop_scheduler'
+        'stop_scheduler',
+        'get_ai_config',
+        'save_ai_config',
+        'clear_ai_api_key',
+        'test_ai_connection'
       ];
 
       for (const cmd of expected) {

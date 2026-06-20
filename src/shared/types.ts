@@ -22,6 +22,28 @@ export const TODO_PRIORITY_LABEL: Record<TodoPriority, string> = {
 
 export const TODO_PRIORITY_DEFAULT: TodoPriority = 'medium';
 
+export type AiProviderType = 'deepseek' | 'openai' | 'custom_openai_compatible';
+
+export type AiPublicConfig = {
+  enabled: boolean;
+  provider: AiProviderType;
+  baseUrl: string;
+  model: string;
+  apiKeySaved: boolean;
+};
+
+export type SaveAiConfigInput = {
+  provider: AiProviderType;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+};
+
+export type AiConnectionTestResult = {
+  ok: boolean;
+  message: string;
+};
+
 export type Todo = {
   id: string;
   title: string;
