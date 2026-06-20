@@ -2,13 +2,14 @@ import { Check, Clock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import type {
   AddTodoInput,
+  AppSnapshot,
   Todo,
   TodoPriority,
   UpdateTodoInput
 } from '../../shared/types';
 import { TODO_PRIORITY_DEFAULT } from '../../shared/types';
 import { ActionButton } from './common/ActionButton';
-import { AiSettingsDialog } from './AiSettingsDialog';
+import { AiPlanCard } from './AiPlanCard';
 import { PriorityBadge, PrioritySelector } from './PrioritySelector';
 import { SoundSettingsBar } from './SoundSettingsBar';
 import { TimeWheelPicker } from './TimeWheelPicker';
@@ -20,6 +21,7 @@ type TodoPanelProps = {
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, input: UpdateTodoInput) => void;
+  onSnapshotChange: (snapshot: AppSnapshot) => void;
   /** 全局提示音设置（今日计划 / 健康节律共用）。 */
   soundFilePath: string | null;
   /** 用户选了新提示音文件。父组件负责写盘 + 写 settings。 */
@@ -50,6 +52,7 @@ export function TodoPanel({
   onToggle,
   onDelete,
   onUpdate,
+  onSnapshotChange,
   soundFilePath,
   onSelectSound,
   onResetSound
@@ -68,7 +71,7 @@ export function TodoPanel({
   const [editPriority, setEditPriority] = useState<TodoPriority>(TODO_PRIORITY_DEFAULT);
   const [editError, setEditError] = useState('');
   const [editTimePulse, setEditTimePulse] = useState(false);
-  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [aiPlanOpen, setAiPlanOpen] = useState(false);
 
   useEffect(() => {
     if (!timePulse) return;
@@ -169,9 +172,9 @@ export function TodoPanel({
             variant="muted"
             size="sm"
             icon={<Sparkles size={12} />}
-            onClick={() => setAiSettingsOpen(true)}
+            onClick={() => setAiPlanOpen(true)}
           >
-            AI 设置
+            AI 计划
           </ActionButton>
           <ActionButton
             variant="muted"
@@ -183,7 +186,21 @@ export function TodoPanel({
         </div>
       </header>
 
-      {aiSettingsOpen ? <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} /> : null}
+      {aiPlanOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 px-4"
+          role="dialog"
+        >
+          <div className="max-h-[92vh] w-full max-w-[380px] overflow-y-auto rounded-lg border border-assistant-line bg-white shadow-xl">
+            <AiPlanCard
+              todos={todos}
+              onSnapshotChange={onSnapshotChange}
+              onClose={() => setAiPlanOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <SoundSettingsBar
         soundFilePath={soundFilePath}

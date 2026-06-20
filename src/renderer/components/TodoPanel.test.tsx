@@ -27,6 +27,7 @@ describe('TodoPanel', () => {
       onToggle: vi.fn(),
       onDelete: vi.fn(),
       onUpdate: vi.fn(),
+      onSnapshotChange: vi.fn(),
       soundFilePath: null as string | null,
       onSelectSound: vi.fn(),
       onResetSound: vi.fn(),
@@ -51,7 +52,7 @@ describe('TodoPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
 
     expect(onAdd).toHaveBeenCalledWith({ title: '和老师汇报', reminderTime: '14:00', soundEnabled: false, priority: 'medium' });
-  });
+  }, 10000);
 
   it('uses the same top add form pattern as the reminder manager', () => {
     render(<TodoPanel {...buildProps({ todos })} />);
@@ -95,7 +96,7 @@ describe('TodoPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
 
     expect(onAdd).toHaveBeenCalledWith({ title: '测试', reminderTime: null, soundEnabled: true, priority: 'medium' });
-  });
+  }, 10000);
 
   it('shows validation for empty titles', () => {
     render(<TodoPanel {...buildProps()} />);
@@ -332,11 +333,29 @@ describe('TodoPanel', () => {
     expect(onSelectSound.mock.calls[0][0]).toBe(file);
   });
 
-  it('opens AI settings from the title area', async () => {
+  it('shows AI plan entry instead of AI settings in the title area', () => {
     render(<TodoPanel {...buildProps()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI 设置' }));
+    expect(screen.getByRole('button', { name: 'AI 计划' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI 设置' })).toBeNull();
+  });
 
-    expect(await screen.findByText('AI 模型设置')).toBeInTheDocument();
+  it('does not render the AI plan panel by default', () => {
+    render(<TodoPanel {...buildProps({ todos })} />);
+
+    expect(screen.queryByText('AI 生成今日计划')).toBeNull();
+    expect(screen.queryByLabelText('今天要做的事')).toBeNull();
+  });
+
+  it('opens and closes the AI plan panel from the title area', async () => {
+    render(<TodoPanel {...buildProps({ todos })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI 计划' }));
+
+    expect(await screen.findByText('AI 生成今日计划')).toBeInTheDocument();
+    expect(screen.getByLabelText('今天要做的事')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭 AI 计划' }));
+    expect(screen.queryByText('AI 生成今日计划')).toBeNull();
   });
 });

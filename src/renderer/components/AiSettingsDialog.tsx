@@ -104,24 +104,32 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
     setTone('muted');
   }
 
-  async function saveConfig(event: FormEvent) {
-    event.preventDefault();
+  function currentSaveInput() {
+    const trimmedKey = apiKey.trim();
+    return {
+      provider,
+      baseUrl: baseUrl.trim(),
+      model: model.trim(),
+      ...(trimmedKey ? { apiKey: trimmedKey } : {})
+    };
+  }
+
+  function applyPublicConfig(config: AiPublicConfig) {
+    setProvider(config.provider);
+    setBaseUrl(config.baseUrl);
+    setModel(config.model);
+    setApiKeySaved(config.apiKeySaved);
+    setApiKey('');
+  }
+
+  async function saveConfig(event?: FormEvent) {
+    event?.preventDefault();
     setSaving(true);
     setMessage('正在保存配置');
     setTone('muted');
     try {
-      const trimmedKey = apiKey.trim();
-      const config = await desktopApi.ai.saveConfig({
-        provider,
-        baseUrl: baseUrl.trim(),
-        model: model.trim(),
-        ...(trimmedKey ? { apiKey: trimmedKey } : {})
-      });
-      setProvider(config.provider);
-      setBaseUrl(config.baseUrl);
-      setModel(config.model);
-      setApiKeySaved(config.apiKeySaved);
-      setApiKey('');
+      const config = await desktopApi.ai.saveConfig(currentSaveInput());
+      applyPublicConfig(config);
       setMessage('配置已保存');
       setTone('success');
     } catch (error) {
@@ -153,11 +161,13 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
     }
   }
 
-  async function testConnection() {
+  async function saveAndTestConnection() {
     setTesting(true);
-    setMessage('连接测试中');
+    setMessage('保存并测试中...');
     setTone('muted');
     try {
+      const config = await desktopApi.ai.saveConfig(currentSaveInput());
+      applyPublicConfig(config);
       const result = await desktopApi.ai.testConnection();
       setMessage(result.message);
       setTone(result.ok ? 'success' : 'error');
@@ -186,7 +196,7 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
             <h2 className="text-[15px] font-semibold text-assistant-ink">AI 模型设置</h2>
             <p className="mt-0.5 text-[11px] text-assistant-muted">仅配置模型连接，不生成计划</p>
           </div>
-          <ActionButton variant="ghost" size="sm" onClick={onClose}>
+          <ActionButton disabled={busy} variant="ghost" size="sm" onClick={onClose}>
             关闭
           </ActionButton>
         </div>
@@ -258,9 +268,9 @@ export function AiSettingsDialog({ onClose }: AiSettingsDialogProps) {
             disabled={busy}
             variant="muted"
             size="sm"
-            onClick={testConnection}
+            onClick={saveAndTestConnection}
           >
-            {testing ? '连接测试中' : '测试连接'}
+            {testing ? '保存并测试中...' : '保存并测试'}
           </ActionButton>
           <ActionButton disabled={busy || !apiKeySaved} variant="danger" size="sm" onClick={clearApiKey}>
             清除 Key

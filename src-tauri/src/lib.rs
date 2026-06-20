@@ -29,10 +29,11 @@
 //!
 //! 第七阶段：系统托盘。
 //!   - `tray::build_tray` 在 setup 阶段构建 TrayIcon + Menu。
-//!   - 菜单项：今日计划 / 健康节律 / 显示提醒测试 / 退出。
+//!   - 菜单项：今日计划 / 健康节律 / AI 设置 / 退出。
 //!   - 复用第五阶段 `window_manager` 处理窗口相关动作。
 //!     "今日计划"通过 `open_todo_or_focus_main` 优先聚焦 main 窗口，
 //!     避免与前端 invoke `open_todo_window` 产生双窗口。
+//!   - "AI 设置"会聚焦 main 窗口并 emit `open-ai-settings`，由前端打开全局设置弹窗。
 //!   - 退出菜单点击：先 `Scheduler::stop()`，再 `app.exit(0)`。
 //!   - main 窗口 `CloseRequested`：拦截 + `hide()`，让应用继续在托盘常驻；
 //!     从托盘点"今日计划"可重新打开。
@@ -46,7 +47,7 @@
 //! 不包含（明确不在本项目范围）：
 //!   - 通知（OS 级 Notification）— 仍用 ReminderPopup 代替
 //!   - 悬浮球（**永久取消**；系统托盘作为唯一常驻入口）
-//!   - AI 能力（下一阶段可能讨论）
+//!   - AI 聊天机器人、悬浮球入口、AI 健康节律推荐
 //!
 //! 数据契约：所有 command 返回的 JSON 字段名与前端 `src/shared/types.ts` 一致
 //! （依赖 `models.rs` 的 `#[serde(rename_all = "camelCase")]`）。
@@ -136,6 +137,8 @@ pub fn run() {
             commands::save_ai_config,
             commands::clear_ai_api_key,
             commands::test_ai_connection,
+            commands::generate_ai_plan,
+            commands::apply_ai_plan,
             // 第十二阶段：自定义提示音文件落盘。
             // 前端 `desktopApi.saveCustomSound(name, bytes)` → 把音频写到
             // `<app_data_dir>/sounds/<safe_name>`，返回真实绝对路径。

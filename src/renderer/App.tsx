@@ -8,6 +8,7 @@ import type {
   UpdateTodoInput
 } from '../shared/types';
 import { TODO_PRIORITY_DEFAULT } from '../shared/types';
+import { AiSettingsDialog } from './components/AiSettingsDialog';
 import { HealthWindow } from './components/HealthWindow';
 import { ReminderPopup } from './components/ReminderPopup';
 import { TodoPanel } from './components/TodoPanel';
@@ -53,6 +54,7 @@ export function App() {
   // deleteReminder / toggleTodo / toggleReminder）失败时设置，下次 snapshot 广播
   // 或 5s 自动清除。
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [showAiSettings, setShowAiSettings] = useState(false);
   const [now, setNow] = useState(new Date());
   const view = new URLSearchParams(window.location.search).get('view') ?? 'todo';
 
@@ -89,6 +91,8 @@ export function App() {
       setState({ kind: 'ready', snapshot });
     });
   }, [loadSnapshot]);
+
+  useEffect(() => desktopApi.onOpenAiSettings(() => setShowAiSettings(true)), []);
 
   // IPC 调用的统一 snapshot setter：成功路径走这里，错误由 `loadSnapshot` 单独处理。
   // 必须放在 useEffect 之后、`return <TodoPanel/>` 之前，因为 JSX 内的回调
@@ -234,10 +238,14 @@ export function App() {
   }
 
   const snapshot = state.snapshot;
+  const aiSettingsDialog = showAiSettings ? (
+    <AiSettingsDialog onClose={() => setShowAiSettings(false)} />
+  ) : null;
 
   if (view === 'health') {
     return (
       <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
+        {aiSettingsDialog}
         {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
         <div className="min-h-0 flex-1">
           <HealthWindow
@@ -279,6 +287,7 @@ export function App() {
   // 默认（也包括历史上的 'ball' / 其它非法 view）：渲染 TodoPanel。
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[13px] text-assistant-ink">
+      {aiSettingsDialog}
       {operationError ? <OperationErrorBar message={operationError} onDismiss={() => setOperationError(null)} /> : null}
       <div className="min-h-0 flex-1">
         <TodoPanel
@@ -287,6 +296,7 @@ export function App() {
           soundFilePath={snapshot.settings.general.soundFilePath}
           onResetSound={() => void handleResetSound()}
           onSelectSound={(file) => void handleSelectSound(file)}
+          onSnapshotChange={setSnapshotSafe}
           onAdd={(input: AddTodoInput) =>
             void desktopApi.todo
               .addTodo(input)

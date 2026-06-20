@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AiPublicConfig, AppSettings, AppSnapshot } from '../../shared/types';
+import type { AiPlanDraft, AiPublicConfig, AppSettings, AppSnapshot } from '../../shared/types';
 
 const sampleSettings: AppSettings = {
   general: {
@@ -27,6 +27,20 @@ const sampleAiConfig: AiPublicConfig = {
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-v4-flash',
   apiKeySaved: true
+};
+
+const sampleAiPlanDraft: AiPlanDraft = {
+  summary: '已拆成 1 条今日待办',
+  todos: [
+    {
+      title: '复习 Java',
+      reminderTime: '09:30',
+      priority: 'high',
+      soundEnabled: true,
+      reason: '上午专注度更高'
+    }
+  ],
+  warnings: []
 };
 
 function clearPlatformMarkers(): void {
@@ -156,6 +170,33 @@ describe('desktopApi', () => {
         apiKeySaved: false
       });
     });
+
+    it('provides AI plan generation and apply methods in mock mode', async () => {
+      clearPlatformMarkers();
+      const desktopApi = await loadDesktopApi();
+
+      await desktopApi.ai.saveConfig({
+        provider: 'deepseek',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-v4-flash',
+        apiKey: 'test-api-key'
+      });
+
+      const draft = await desktopApi.ai.generateDailyPlan({
+        userInput: '上午复习 Java',
+        date: '2026-06-20',
+        currentTime: '08:30',
+        existingTodos: []
+      });
+      expect(draft.todos.length).toBeGreaterThan(0);
+      expect(JSON.stringify(draft)).not.toContain('test-api-key');
+
+      await expect(
+        desktopApi.ai.applyPlan({ todos: sampleAiPlanDraft.todos })
+      ).resolves.toMatchObject({
+        today: expect.any(String)
+      });
+    });
   });
 
   describe('Tauri adapter invoke delegation', () => {
@@ -273,7 +314,9 @@ describe('desktopApi', () => {
         .mockResolvedValueOnce(sampleAiConfig)
         .mockResolvedValueOnce(sampleAiConfig)
         .mockResolvedValueOnce({ ...sampleAiConfig, apiKeySaved: false })
-        .mockResolvedValueOnce({ ok: true, message: '连接成功' });
+        .mockResolvedValueOnce({ ok: true, message: '连接成功' })
+        .mockResolvedValueOnce(sampleAiPlanDraft)
+        .mockResolvedValueOnce(sampleSnapshot);
       vi.doMock('@tauri-apps/api/core', () => ({ invoke }));
 
       const desktopApi = await loadDesktopApi();
@@ -293,11 +336,28 @@ describe('desktopApi', () => {
         ok: true,
         message: '连接成功'
       });
+      const planInput = {
+        userInput: '上午复习 Java',
+        date: '2026-06-20',
+        currentTime: '08:30',
+        existingTodos: []
+      };
+      await expect(desktopApi.ai.generateDailyPlan(planInput)).resolves.toBe(
+        sampleAiPlanDraft
+      );
+      const applyInput = { todos: sampleAiPlanDraft.todos };
+      await expect(desktopApi.ai.applyPlan(applyInput)).resolves.toBe(sampleSnapshot);
 
       expect(invoke).toHaveBeenNthCalledWith(1, 'get_ai_config');
       expect(invoke).toHaveBeenNthCalledWith(2, 'save_ai_config', { input });
       expect(invoke).toHaveBeenNthCalledWith(3, 'clear_ai_api_key');
       expect(invoke).toHaveBeenNthCalledWith(4, 'test_ai_connection');
+      expect(invoke).toHaveBeenNthCalledWith(5, 'generate_ai_plan', {
+        input: planInput
+      });
+      expect(invoke).toHaveBeenNthCalledWith(6, 'apply_ai_plan', {
+        input: applyInput
+      });
     });
   });
 
@@ -407,6 +467,23 @@ describe('desktopApi', () => {
       expect(unlisten).toHaveBeenCalledTimes(1);
     });
 
+    it('listens for the tray open-ai-settings event', async () => {
+      const invoke = vi.fn().mockResolvedValue(sampleSnapshot);
+      const unlisten = vi.fn();
+      const listen = vi.fn().mockResolvedValue(unlisten);
+      vi.doMock('@tauri-apps/api/core', () => ({ invoke }));
+      vi.doMock('@tauri-apps/api/event', () => ({ listen }));
+
+      const desktopApi = await loadDesktopApi();
+      const handler = vi.fn();
+      const unsubscribe = desktopApi.onOpenAiSettings(handler);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      unsubscribe();
+
+      expect(listen).toHaveBeenCalledWith('open-ai-settings', expect.any(Function));
+      expect(unlisten).toHaveBeenCalledTimes(1);
+    });
+
     it('calls unlisten if listen resolves after unsubscribe', async () => {
       let resolveListen: (unlisten: () => void) => void = () => undefined;
       const unlisten = vi.fn();
@@ -487,7 +564,9 @@ describe('desktopApi', () => {
         'get_ai_config',
         'save_ai_config',
         'clear_ai_api_key',
-        'test_ai_connection'
+        'test_ai_connection',
+        'generate_ai_plan',
+        'apply_ai_plan'
       ];
 
       for (const cmd of expected) {

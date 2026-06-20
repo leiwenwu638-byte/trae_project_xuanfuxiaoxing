@@ -44,6 +44,38 @@ export type AiConnectionTestResult = {
   message: string;
 };
 
+export type AiExistingTodo = {
+  title: string;
+  reminderTime: string | null;
+  priority: TodoPriority;
+  completed: boolean;
+};
+
+export type AiPlanRequest = {
+  userInput: string;
+  date: string;
+  currentTime: string;
+  existingTodos: AiExistingTodo[];
+};
+
+export type AiGeneratedTodo = {
+  title: string;
+  reminderTime: string | null;
+  priority: TodoPriority;
+  soundEnabled: boolean;
+  reason?: string;
+};
+
+export type AiPlanDraft = {
+  summary: string;
+  todos: AiGeneratedTodo[];
+  warnings: string[];
+};
+
+export type ApplyAiPlanInput = {
+  todos: AiGeneratedTodo[];
+};
+
 export type Todo = {
   id: string;
   title: string;

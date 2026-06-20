@@ -76,6 +76,52 @@ pub struct AiConnectionTestResult {
     pub message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiExistingTodo {
+    pub title: String,
+    pub reminder_time: Option<String>,
+    pub priority: TodoPriority,
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiPlanRequest {
+    pub user_input: String,
+    pub date: String,
+    pub current_time: String,
+    #[serde(default)]
+    pub existing_todos: Vec<AiExistingTodo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiGeneratedTodo {
+    pub title: String,
+    pub reminder_time: Option<String>,
+    pub priority: TodoPriority,
+    #[serde(default = "default_true")]
+    pub sound_enabled: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiPlanDraft {
+    pub summary: String,
+    pub todos: Vec<AiGeneratedTodo>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyAiPlanInput {
+    pub todos: Vec<AiGeneratedTodo>,
+}
+
 // ---------------------------------------------------------------------------
 // 1. Todo
 // ---------------------------------------------------------------------------

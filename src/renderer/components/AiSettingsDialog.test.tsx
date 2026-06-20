@@ -97,21 +97,68 @@ describe('AiSettingsDialog', () => {
   });
 
   it('shows test connection success and failure messages', async () => {
-    const { rerender } = render(<AiSettingsDialog onClose={vi.fn()} />);
+    render(<AiSettingsDialog onClose={vi.fn()} />);
 
     await screen.findByText('API Key：已保存');
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
     expect(await screen.findByText('连接成功')).toBeInTheDocument();
 
+    expect(aiApi.saveConfig.mock.invocationCallOrder[0]).toBeLessThan(
+      aiApi.testConnection.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('saves current form values before testing connection', async () => {
+    render(<AiSettingsDialog onClose={vi.fn()} />);
+
+    await screen.findByText('API Key：已保存');
+    fireEvent.change(screen.getByLabelText('服务商'), {
+      target: { value: 'custom_openai_compatible' }
+    });
+    fireEvent.change(screen.getByLabelText('Base URL'), {
+      target: { value: 'https://example.test/v1' }
+    });
+    fireEvent.change(screen.getByLabelText('模型名称'), { target: { value: 'model-x' } });
+    fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'new-key' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
+
+    await waitFor(() => {
+      expect(aiApi.saveConfig).toHaveBeenCalledWith({
+        provider: 'custom_openai_compatible',
+        baseUrl: 'https://example.test/v1',
+        model: 'model-x',
+        apiKey: 'new-key'
+      });
+    });
+    expect(aiApi.saveConfig.mock.invocationCallOrder[0]).toBeLessThan(
+      aiApi.testConnection.mock.invocationCallOrder[0]
+    );
+    expect(aiApi.testConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not test connection when saving the current form fails', async () => {
+    aiApi.saveConfig.mockRejectedValueOnce(new Error('Base URL 不能为空'));
+    render(<AiSettingsDialog onClose={vi.fn()} />);
+
+    await screen.findByText('API Key：已保存');
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
+
+    expect(await screen.findByText('Base URL 不能为空')).toBeInTheDocument();
+    expect(aiApi.testConnection).not.toHaveBeenCalled();
+  });
+
+  it('shows backend test failure after save succeeds', async () => {
     aiApi.getConfig.mockResolvedValue(savedConfig);
     aiApi.testConnection.mockResolvedValueOnce({
       ok: false,
       message: '连接失败，请检查 API Key / Base URL / 模型名称'
     });
-    rerender(<AiSettingsDialog onClose={vi.fn()} />);
+    render(<AiSettingsDialog onClose={vi.fn()} />);
 
     await screen.findByText('API Key：已保存');
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }));
     expect(
       await screen.findByText('连接失败，请检查 API Key / Base URL / 模型名称')
     ).toBeInTheDocument();

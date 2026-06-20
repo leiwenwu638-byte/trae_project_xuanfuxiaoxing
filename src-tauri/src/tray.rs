@@ -5,7 +5,7 @@
 //! 菜单项：
 //!   - 今日计划  → 调 `open_todo_or_focus_main`，复用 main 窗口（避免双窗口）
 //!   - 健康节律  → 调 `open_or_focus_window(Health)`，复用第五阶段窗口管理
-//!   - 显示提醒测试 → 调 `window_manager::show_popup` 触发一个固定 payload 的弹窗
+//!   - AI 设置  → 聚焦主窗口并 emit `open-ai-settings`
 //!   - ──
 //!   - 退出      → 先 `Scheduler::stop()`，再 `app.exit(0)`
 //!
@@ -19,7 +19,7 @@
 //! 不在本模块范围（明确不实现）：
 //!   - 真实悬浮球（独立 always-on-top 小窗口）— **已永久取消**，
 //!     系统托盘作为唯一常驻入口
-//!   - 通知 / AI
+//!   - 通知 / 悬浮球
 //!   - 任务栏角标变化（unfinished todo count）— Tauri 端对应 `set_overlay_icon`，
 //!     本阶段先不做（菜单项有"今日计划"已足够
 //!     唤起用户；后续阶段补角标）。
@@ -29,8 +29,9 @@
 //!   - 实际托盘构建、菜单注册、退出路径不进入单测（Tauri runtime 不可桩）；
 //!     由 dev 工具 / 手动验证。
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(test)]
 use crate::models::ReminderPopupPayload;
 use crate::window_manager::{self, WindowKind};
 
@@ -42,7 +43,7 @@ use crate::window_manager::{self, WindowKind};
 pub mod menu_id {
     pub const TODO: &str = "tray.open_todo";
     pub const HEALTH: &str = "tray.open_health";
-    pub const TEST_POPUP: &str = "tray.test_popup";
+    pub const AI_SETTINGS: &str = "tray.open_ai_settings";
     pub const QUIT: &str = "tray.quit";
 }
 
@@ -50,7 +51,7 @@ pub mod menu_id {
 pub mod menu_label {
     pub const TODO: &str = "今日计划";
     pub const HEALTH: &str = "健康节律";
-    pub const TEST_POPUP: &str = "显示提醒测试";
+    pub const AI_SETTINGS: &str = "AI 设置";
     pub const QUIT: &str = "退出";
     pub const TRAY_TOOLTIP: &str = "悬浮小醒";
 }
@@ -70,8 +71,8 @@ pub enum MenuAction {
     OpenTodo,
     /// 打开 / 聚焦健康节律窗口
     OpenHealth,
-    /// 触发一个测试弹窗（payload 在 [build_test_popup_payload] 里定义）
-    ShowTestPopup,
+    /// 打开 AI 模型设置弹窗
+    OpenAiSettings,
     /// 退出应用（调度器由回调在调 [`crate::scheduler::Scheduler::stop`] 后再 exit）
     Quit,
 }
@@ -84,7 +85,7 @@ pub fn match_menu_id(id: &str) -> Option<MenuAction> {
     match id {
         menu_id::TODO => Some(MenuAction::OpenTodo),
         menu_id::HEALTH => Some(MenuAction::OpenHealth),
-        menu_id::TEST_POPUP => Some(MenuAction::ShowTestPopup),
+        menu_id::AI_SETTINGS => Some(MenuAction::OpenAiSettings),
         menu_id::QUIT => Some(MenuAction::Quit),
         _ => None,
     }
@@ -94,17 +95,18 @@ pub fn match_menu_id(id: &str) -> Option<MenuAction> {
 // 3. 测试弹窗 payload
 // ---------------------------------------------------------------------------
 
-/// "显示提醒测试" 菜单项触发的固定 payload。
+/// 内部开发用测试弹窗 payload。
 ///
 /// 与真实提醒弹窗共用 [`window_manager::show_popup`] 入口，
-/// 不走调度器、不持久化状态——纯调试用。
+/// 不走调度器、不持久化状态。正式托盘菜单不展示该入口。
 ///
 /// 调用方传入当前应测试的 sound_src：全局自定义路径优先，缺失时传
 /// `Some("default")`，让前端 `ReminderPopup` 映射到 `public/sound-default.wav`。
+#[cfg(test)]
 pub fn build_test_popup_payload(sound_src: Option<String>) -> ReminderPopupPayload {
     ReminderPopupPayload {
         title: "测试提醒".to_string(),
-        body: "这是一条来自托盘菜单的测试弹窗，用来验证 reminder-popup 链路。".to_string(),
+        body: "这是一条内部开发测试弹窗，用来验证 reminder-popup 链路。".to_string(),
         icon: Some("🛎️".to_string()),
         sound_src,
         duration_ms: None,
@@ -141,17 +143,9 @@ pub fn dispatch_action(app: &AppHandle, action: MenuAction) -> tauri::Result<()>
             // 复用第五阶段：health 窗口不存在则创建；已存在则 show+focus。
             window_manager::open_or_focus_window(app, WindowKind::Health, None)
         }
-        MenuAction::ShowTestPopup => {
-            // 复用第五阶段 + 第六阶段的 show_popup：走 replace_window 注入 payload。
-            let sound_src = app
-                .state::<crate::state::AppState>()
-                .settings
-                .lock()
-                .ok()
-                .and_then(|settings| settings.general.sound_file_path.clone())
-                .or_else(|| Some("default".to_string()));
-            let payload = build_test_popup_payload(sound_src);
-            window_manager::show_popup(app, &payload)
+        MenuAction::OpenAiSettings => {
+            window_manager::open_todo_or_focus_main(app)?;
+            app.emit("open-ai-settings", ())
         }
         MenuAction::Quit => {
             // 见 fn 文档说明：实际退出路径由 lib.rs 编排。
@@ -178,10 +172,10 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let todo_item = MenuItem::with_id(app, menu_id::TODO, menu_label::TODO, true, None::<&str>)?;
     let health_item =
         MenuItem::with_id(app, menu_id::HEALTH, menu_label::HEALTH, true, None::<&str>)?;
-    let test_popup_item = MenuItem::with_id(
+    let ai_settings_item = MenuItem::with_id(
         app,
-        menu_id::TEST_POPUP,
-        menu_label::TEST_POPUP,
+        menu_id::AI_SETTINGS,
+        menu_label::AI_SETTINGS,
         true,
         None::<&str>,
     )?;
@@ -193,7 +187,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &[
             &todo_item,
             &health_item,
-            &test_popup_item,
+            &ai_settings_item,
             &separator,
             &quit_item,
         ],
@@ -279,10 +273,10 @@ mod tests {
     }
 
     #[test]
-    fn test_popup_menu_id_maps_to_show_test_popup() {
+    fn ai_settings_menu_id_maps_to_open_ai_settings() {
         assert_eq!(
-            match_menu_id(menu_id::TEST_POPUP),
-            Some(MenuAction::ShowTestPopup)
+            match_menu_id(menu_id::AI_SETTINGS),
+            Some(MenuAction::OpenAiSettings)
         );
     }
 
@@ -303,7 +297,7 @@ mod tests {
         // 防止重命名常量后忘了同步 ID — 测试钉住稳定接口
         assert_eq!(menu_id::TODO, "tray.open_todo");
         assert_eq!(menu_id::HEALTH, "tray.open_health");
-        assert_eq!(menu_id::TEST_POPUP, "tray.test_popup");
+        assert_eq!(menu_id::AI_SETTINGS, "tray.open_ai_settings");
         assert_eq!(menu_id::QUIT, "tray.quit");
     }
 
@@ -315,7 +309,7 @@ mod tests {
         assert_eq!(payload.title, "测试提醒");
         assert!(!payload.body.is_empty());
         // 写一个可断言的最小子串，避免以后改文案破坏契约
-        assert!(payload.body.contains("托盘"));
+        assert!(payload.body.contains("内部开发测试弹窗"));
     }
 
     #[test]
@@ -327,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_popup_payload_uses_default_sound() {
-        // 托盘"显示提醒测试"必须能播声音；`Some("default")` 是前端
+        // 内部测试弹窗必须能播声音；`Some("default")` 是前端
         // `ReminderPopup` 用来映射到 `/sound-default.wav` 的关键字面量。
         let payload = build_test_popup_payload(Some("default".to_string()));
         assert_eq!(payload.sound_src.as_deref(), Some("default"));
@@ -357,11 +351,24 @@ mod tests {
         for label in [
             menu_label::TODO,
             menu_label::HEALTH,
-            menu_label::TEST_POPUP,
+            menu_label::AI_SETTINGS,
             menu_label::QUIT,
         ] {
             assert!(!label.trim().is_empty(), "菜单文案不能为空: {label}");
         }
         assert!(!menu_label::TRAY_TOOLTIP.trim().is_empty());
+    }
+
+    #[test]
+    fn tray_menu_uses_ai_settings_label_not_test_popup_label() {
+        assert_eq!(menu_label::AI_SETTINGS, "AI 设置");
+        for label in [
+            menu_label::TODO,
+            menu_label::HEALTH,
+            menu_label::AI_SETTINGS,
+            menu_label::QUIT,
+        ] {
+            assert_ne!(label, "显示提醒测试");
+        }
     }
 }

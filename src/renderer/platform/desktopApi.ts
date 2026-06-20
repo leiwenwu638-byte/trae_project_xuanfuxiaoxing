@@ -3,9 +3,12 @@ import type {
   AddHealthReminderInput,
   AddTodoInput,
   AiConnectionTestResult,
+  AiPlanDraft,
+  AiPlanRequest,
   AiPublicConfig,
   AppSettings,
   AppSnapshot,
+  ApplyAiPlanInput,
   HealthReminder,
   SaveAiConfigInput,
   Todo,
@@ -35,6 +38,7 @@ export type UpdateSettingsInput = {
 };
 
 export type StateChangeListener = (snapshot: AppSnapshot) => void;
+export type VoidEventListener = () => void;
 
 export interface DesktopTodoApi {
   listTodos(): Promise<Todo[]>;
@@ -104,6 +108,8 @@ export interface DesktopAiApi {
   saveConfig(input: SaveAiConfigInput): Promise<AiPublicConfig>;
   clearApiKey(): Promise<AiPublicConfig>;
   testConnection(): Promise<AiConnectionTestResult>;
+  generateDailyPlan(input: AiPlanRequest): Promise<AiPlanDraft>;
+  applyPlan(input: ApplyAiPlanInput): Promise<AppSnapshot>;
 }
 
 export interface DesktopApi {
@@ -117,6 +123,7 @@ export interface DesktopApi {
   ai: DesktopAiApi;
   getSnapshot(): Promise<AppSnapshot>;
   onStateChanged(listener: StateChangeListener): () => void;
+  onOpenAiSettings(listener: VoidEventListener): () => void;
 }
 
 type Platform = DesktopApi['platform'];
@@ -212,7 +219,9 @@ export const REQUIRED_TAURI_COMMANDS_FOR_TEST = new Set<string>([
   'get_ai_config',
   'save_ai_config',
   'clear_ai_api_key',
-  'test_ai_connection'
+  'test_ai_connection',
+  'generate_ai_plan',
+  'apply_ai_plan'
 ]);
 
 function createTauriAdapter(): DesktopApi {
@@ -307,9 +316,33 @@ function createTauriAdapter(): DesktopApi {
       getConfig: () => coreInvoke<AiPublicConfig>('get_ai_config'),
       saveConfig: (input) => coreInvoke<AiPublicConfig>('save_ai_config', { input }),
       clearApiKey: () => coreInvoke<AiPublicConfig>('clear_ai_api_key'),
-      testConnection: () => coreInvoke<AiConnectionTestResult>('test_ai_connection')
+      testConnection: () => coreInvoke<AiConnectionTestResult>('test_ai_connection'),
+      generateDailyPlan: (input) => coreInvoke<AiPlanDraft>('generate_ai_plan', { input }),
+      applyPlan: (input) => coreInvoke<AppSnapshot>('apply_ai_plan', { input })
     },
     getSnapshot: () => coreInvoke<AppSnapshot>('get_snapshot'),
+    onOpenAiSettings: (listener) => {
+      let unlisten: (() => void) | null = null;
+      let disposed = false;
+      void tauriListen<void>('open-ai-settings', () => listener())
+        .then((fn) => {
+          if (disposed) {
+            fn();
+          } else {
+            unlisten = fn;
+          }
+        })
+        .catch((error) => {
+          console.warn('[desktopApi] onOpenAiSettings listen failed:', error);
+        });
+      return () => {
+        disposed = true;
+        if (unlisten) {
+          unlisten();
+          unlisten = null;
+        }
+      };
+    },
     onStateChanged: (listener) => {
       let unlisten: (() => void) | null = null;
       let disposed = false;
@@ -406,9 +439,48 @@ function createMockAdapter(): DesktopApi {
       testConnection: async () =>
         aiConfig.apiKeySaved
           ? { ok: true, message: '连接成功' }
-          : { ok: false, message: '未配置 API Key' }
+          : { ok: false, message: '未配置 API Key' },
+      generateDailyPlan: async (input) => {
+        if (!aiConfig.apiKeySaved) {
+          throw new Error('请先配置 AI API Key');
+        }
+        const title = input.userInput.trim().slice(0, 40) || '整理今日计划';
+        return {
+          summary: '已生成今日计划草稿',
+          todos: [
+            {
+              title,
+              reminderTime: null,
+              priority: 'medium',
+              soundEnabled: true,
+              reason: '根据输入拆分'
+            }
+          ],
+          warnings: []
+        };
+      },
+      applyPlan: async (input) => {
+        const today = new Date().toISOString().slice(0, 10);
+        fallback.today = today;
+        fallback.todos = [
+          ...fallback.todos,
+          ...input.todos.map((todo, index) => ({
+            id: `mock-ai-${Date.now()}-${index}`,
+            title: todo.title,
+            reminderTime: todo.reminderTime,
+            soundEnabled: todo.soundEnabled,
+            completed: false,
+            priority: todo.priority,
+            remindedAt: null,
+            createdAt: new Date().toISOString()
+          }))
+        ];
+        listeners.forEach((listener) => listener(fallback));
+        return fallback;
+      }
     },
     getSnapshot: async () => fallback,
+    onOpenAiSettings: () => () => undefined,
     onStateChanged: (listener) => {
       listeners.add(listener);
       return () => {

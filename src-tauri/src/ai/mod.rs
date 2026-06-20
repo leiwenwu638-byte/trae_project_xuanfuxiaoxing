@@ -1,12 +1,16 @@
 pub mod config;
 pub mod openai_compatible;
+pub mod parser;
+pub mod prompt;
 pub mod secret;
 
 use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager};
 
-use crate::models::{AiConnectionTestResult, AiPublicConfig, SaveAiConfigInput};
+use crate::models::{
+    AiConnectionTestResult, AiPlanDraft, AiPlanRequest, AiPublicConfig, SaveAiConfigInput,
+};
 
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -69,4 +73,25 @@ pub async fn test_connection(app: &AppHandle) -> Result<AiConnectionTestResult, 
     };
 
     Ok(openai_compatible::test_connection(&public.base_url, &public.model, &api_key).await)
+}
+
+pub async fn generate_plan(app: &AppHandle, input: &AiPlanRequest) -> Result<AiPlanDraft, String> {
+    let public = get_config(app)?;
+    let data_dir = app_data_dir(app)?;
+    let secret_path = secret::secret_path(&data_dir);
+    let api_key = secret::read_api_key_from_path(&secret_path)?
+        .ok_or_else(|| "请先配置 AI API Key".to_string())?;
+
+    let system_prompt = prompt::build_system_prompt();
+    let user_prompt = prompt::build_user_prompt(input);
+    let content = openai_compatible::generate_plan(
+        &public.base_url,
+        &public.model,
+        &api_key,
+        &system_prompt,
+        &user_prompt,
+    )
+    .await?;
+
+    parser::parse_plan_draft(&content, &input.existing_todos)
 }

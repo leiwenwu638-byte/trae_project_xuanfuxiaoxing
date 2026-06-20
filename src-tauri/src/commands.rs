@@ -36,9 +36,10 @@ use uuid::Uuid;
 use crate::ai;
 use crate::models::{
     add_minutes, create_default_health_reminders, default_app_settings, local_date_key, to_hhmm,
-    to_iso, AddHealthReminderInput, AddTodoInput, AiConnectionTestResult, AiPublicConfig,
-    AppSettings, AppSnapshot, HealthReminder, ReminderPopupPayload, SaveAiConfigInput, Todo,
-    TodoStore, UpdateHealthReminderInput, UpdateSettingsInput, UpdateTodoInput,
+    to_iso, AddHealthReminderInput, AddTodoInput, AiConnectionTestResult, AiPlanDraft,
+    AiPlanRequest, AiPublicConfig, AppSettings, AppSnapshot, ApplyAiPlanInput, HealthReminder,
+    ReminderPopupPayload, SaveAiConfigInput, Todo, TodoStore, UpdateHealthReminderInput,
+    UpdateSettingsInput, UpdateTodoInput,
 };
 use crate::scheduler::{Scheduler, SchedulerStatus};
 use crate::state::AppState;
@@ -460,6 +461,32 @@ pub async fn test_ai_connection(app: AppHandle) -> CmdResult<AiConnectionTestRes
     ai::test_connection(&app).await
 }
 
+#[tauri::command]
+pub async fn generate_ai_plan(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    input: AiPlanRequest,
+) -> CmdResult<AiPlanDraft> {
+    validate_ai_plan_request(&input)?;
+    ai::generate_plan(&app, &input).await
+}
+
+#[tauri::command]
+pub fn apply_ai_plan(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    input: ApplyAiPlanInput,
+) -> CmdResult<AppSnapshot> {
+    let today = local_date_key(Local::now());
+    {
+        let mut store = state.todo_store.lock().map_err(stringify)?;
+        apply_ai_plan_to_store(&mut store, &today, input)?;
+        state.persist_todos(&store).map_err(stringify)?;
+    }
+    broadcast_snapshot(&app, &state);
+    Ok(build_snapshot(&state))
+}
+
 pub const MAX_CUSTOM_SOUND_BYTES: usize = 5 * 1024 * 1024;
 
 /// 允许的扩展名。`wav / mp3 / ogg` 覆盖所有主流浏览器 / WebView 原生支持的
@@ -684,6 +711,61 @@ fn build_new_todo(input: &AddTodoInput, title: String, reminder_time: Option<Str
     }
 }
 
+fn validate_ai_plan_request(input: &AiPlanRequest) -> CmdResult<()> {
+    if input.user_input.trim().is_empty() {
+        return err("今天要做的事不能为空");
+    }
+    Ok(())
+}
+
+fn apply_ai_plan_to_store(
+    store: &mut TodoStore,
+    today: &str,
+    input: ApplyAiPlanInput,
+) -> CmdResult<usize> {
+    if input.todos.is_empty() {
+        return err("请选择至少一条任务");
+    }
+
+    let existing_titles = store
+        .get(today)
+        .map(|todos| {
+            todos
+                .iter()
+                .map(|todo| todo.title.trim().to_string())
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let mut seen_titles = std::collections::BTreeSet::new();
+    let mut new_todos = Vec::new();
+
+    for generated in input.todos {
+        let title = validate_title(&generated.title)?;
+        let reminder_time = normalize_reminder_time(generated.reminder_time.as_deref())?;
+        if existing_titles.contains(&title) || !seen_titles.insert(title.clone()) {
+            continue;
+        }
+        let add_input = AddTodoInput {
+            title: title.clone(),
+            reminder_time: reminder_time.clone(),
+            sound_enabled: Some(generated.sound_enabled),
+            priority: Some(generated.priority),
+        };
+        new_todos.push(build_new_todo(&add_input, title, reminder_time));
+    }
+
+    if new_todos.is_empty() {
+        return err("没有可导入任务");
+    }
+
+    let count = new_todos.len();
+    store
+        .entry(today.to_string())
+        .or_insert_with(Vec::new)
+        .extend(new_todos);
+    Ok(count)
+}
+
 /// 在 `TodoStore` 中按 `today` 找一条 todo，返回可变引用。
 ///
 ///   - `today` 这一组不存在（今天还没创建 todo）→ `Err` "待办不存在或已被删除"；
@@ -843,6 +925,111 @@ mod tests {
             sound_enabled: None,
             priority: None,
         }
+    }
+
+    fn sample_generated_todo(title: &str) -> crate::models::AiGeneratedTodo {
+        crate::models::AiGeneratedTodo {
+            title: title.to_string(),
+            reminder_time: Some("09:30".to_string()),
+            priority: TodoPriority::High,
+            sound_enabled: true,
+            reason: Some("上午处理重点任务".to_string()),
+        }
+    }
+
+    #[test]
+    fn validate_ai_plan_request_rejects_empty_user_input() {
+        let input = crate::models::AiPlanRequest {
+            user_input: "   ".to_string(),
+            date: "2026-06-20".to_string(),
+            current_time: "08:30".to_string(),
+            existing_todos: vec![],
+        };
+
+        let err = validate_ai_plan_request(&input).unwrap_err();
+        assert!(err.contains("今天要做的事不能为空"));
+    }
+
+    #[test]
+    fn apply_ai_plan_to_store_writes_valid_todos_in_batch() {
+        let mut store: TodoStore = BTreeMap::new();
+        let today = "2026-06-20";
+        let written = apply_ai_plan_to_store(
+            &mut store,
+            today,
+            crate::models::ApplyAiPlanInput {
+                todos: vec![
+                    sample_generated_todo("复习 Java"),
+                    crate::models::AiGeneratedTodo {
+                        reminder_time: None,
+                        priority: TodoPriority::Medium,
+                        sound_enabled: false,
+                        ..sample_generated_todo("完善 README")
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(written, 2);
+        let todos = store.get(today).unwrap();
+        assert_eq!(todos.len(), 2);
+        assert_eq!(todos[0].title, "复习 Java");
+        assert_eq!(todos[0].reminder_time.as_deref(), Some("09:30"));
+        assert_eq!(todos[0].priority, TodoPriority::High);
+        assert!(todos[0].sound_enabled);
+        assert_eq!(todos[1].priority, TodoPriority::Medium);
+        assert!(!todos[1].sound_enabled);
+    }
+
+    #[test]
+    fn apply_ai_plan_to_store_rejects_invalid_todo() {
+        let mut store: TodoStore = BTreeMap::new();
+        let err = apply_ai_plan_to_store(
+            &mut store,
+            "2026-06-20",
+            crate::models::ApplyAiPlanInput {
+                todos: vec![crate::models::AiGeneratedTodo {
+                    title: "坏时间".to_string(),
+                    reminder_time: Some("24:00".to_string()),
+                    priority: TodoPriority::Medium,
+                    sound_enabled: true,
+                    reason: None,
+                }],
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.contains("提醒时间"));
+        assert!(store.get("2026-06-20").is_none());
+    }
+
+    #[test]
+    fn apply_ai_plan_to_store_skips_duplicate_titles() {
+        let mut store: TodoStore = BTreeMap::new();
+        let today = "2026-06-20";
+        store.insert(
+            today.to_string(),
+            vec![sample_todo("existing", "复习 Java")],
+        );
+
+        let written = apply_ai_plan_to_store(
+            &mut store,
+            today,
+            crate::models::ApplyAiPlanInput {
+                todos: vec![
+                    sample_generated_todo("复习 Java"),
+                    sample_generated_todo("完善 README"),
+                ],
+            },
+        )
+        .unwrap();
+
+        let todos = store.get(today).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(todos.len(), 2);
+        assert_eq!(todos[0].title, "复习 Java");
+        assert_eq!(todos[1].title, "完善 README");
     }
 
     #[test]

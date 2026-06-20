@@ -12,7 +12,8 @@
 - **节律保持**：配合桌面弹窗 + 系统托盘入口，养成稳定的工作节奏。
 
 当前版本专注于基础能力收口：本地 JSON 持久化、托盘常驻、滚轮式时间选择器、
-桌面弹窗、调度器。**不实现** AI 学习计划生成、悬浮球等大功能。
+桌面弹窗、调度器，以及 AI 生成今日计划草稿。**不实现**聊天机器人、悬浮球、
+AI 健康节律推荐等大功能。
 
 ## 技术栈
 
@@ -37,22 +38,30 @@
 - **可自定义提示音**：在"今日计划 / 健康节律"顶部点"更换"上传 wav / mp3 / ogg（≤ 5MB），
   写到 `app_data_dir/sounds/`，UI 只显示"提示音：默认 / 自定义"，不暴露底层文件名；
   两页面共用同一设置；点"恢复默认"清回默认音；
-- **AI 模型设置（第一阶段）**：今日计划顶部提供"AI 设置"入口，可配置 DeepSeek、OpenAI
-  或自定义 OpenAI-compatible 接口，支持保存 / 清除 API Key 和测试连接；本阶段不生成今日计划；
-- **系统托盘常驻**：托盘菜单"今日计划 / 健康节律 / 显示提醒测试 / 退出"，未关闭窗口也可继续工作；
+- **AI 今日计划草稿**：系统托盘右键菜单提供"AI 设置"入口，用于配置 DeepSeek、OpenAI
+  或自定义 OpenAI-compatible 接口，支持保存 / 清除 API Key、保存并测试连接；
+  今日待办顶部提供"AI 计划"入口，可输入自然语言计划，由 AI 生成待办草稿，用户预览并勾选后才导入今日待办；
+- **系统托盘常驻**：托盘菜单"今日计划 / 健康节律 / AI 设置 / 退出"，未关闭窗口也可继续工作；
 - **本地 JSON 持久化**：所有数据落盘 `app_data_dir`，无任何云端依赖。
 
 ## AI 设置说明
 
-当前 AI 功能仅完成第一阶段：模型配置和连接测试。暂未实现 AI 生成今日计划、AI 聊天、
-AI 健康节律推荐，也不会自动写入待办。
+当前 AI 功能包含模型配置、保存并测试连接、AI 生成今日计划草稿、预览后导入。
+AI 不会自动写入待办；模型返回结果必须先展示预览，用户点击"导入选中"后才会写入
+当天 `todos.json`。
 
+- AI 设置入口：通过系统托盘右键菜单"AI 设置"打开，只负责模型服务商、Base URL、模型名称和 API Key 配置。
+- AI 计划入口：在今日待办页面点击"AI 计划"打开，只负责生成今日待办草稿、预览和导入。
 - 支持服务商：DeepSeek、OpenAI、自定义 OpenAI-compatible。
 - 默认 DeepSeek 配置：`baseUrl = https://api.deepseek.com`，`model = deepseek-v4-flash`。
 - 本软件不内置 API Key。API Key 由用户自行到对应平台申请并填入，属于 BYOK
   （Bring Your Own Key）模式。
 - API Key 不会显示在页面中，也不会进入 `AppSnapshot` 或普通设置 JSON。
+- API Key 当前保存在 Tauri `app_data_dir` 下的独立 `ai_secret.json`，与
+  `ai_config.json` 分离；后续可迁移到系统凭据管理（Windows Credential Manager /
+  macOS Keychain / Linux Secret Service）。
 - 不要把 API Key 写入源码、README、`.env` 后提交到 GitHub。
+- 不实现 AI 聊天、悬浮球、AI 健康节律推荐。
 
 ## 本地运行
 
@@ -181,8 +190,8 @@ npm run tauri:build
   下的 `todos.json` / `reminders.json`；卸载应用前手动 `cp` 出来即可迁移；
 - **无外部依赖**：不联网、不上传、不引入第三方统计 / 分析；适合作为参赛作品
   做静态审查；
-- **后续可扩展**：在 `src/shared/reminderContent.ts` 增加 `createAIReminderPlan`
-  等函数 + Tauri 端对应命令即可补 AI 学习计划生成（**本版本不实现**）；
+- **AI 写入边界**：AI 只生成今日待办草稿，导入前可取消勾选；后端 `apply_ai_plan`
+  复用待办标题、提醒时间和优先级校验，非法或重复待办不会直接进入本地 JSON；
 - **设计取舍**：详情见 `src/renderer/components/common/ActionButton.tsx` 顶部
   JSDoc（统一按钮交互）、`src-tauri/src/window_manager.rs` 顶部 rustdoc
   （窗口尺寸 / 装饰策略）。

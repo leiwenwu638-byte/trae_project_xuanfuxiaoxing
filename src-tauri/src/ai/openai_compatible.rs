@@ -27,6 +27,25 @@ pub fn build_connection_test_body(model: &str) -> Value {
     })
 }
 
+pub fn build_generate_plan_body(model: &str, system_prompt: &str, user_prompt: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 1200,
+        "stream": false
+    })
+}
+
 pub fn missing_api_key_result() -> AiConnectionTestResult {
     AiConnectionTestResult {
         ok: false,
@@ -100,6 +119,57 @@ pub async fn test_connection(base_url: &str, model: &str, api_key: &str) -> AiCo
     }
 }
 
+pub async fn generate_plan(
+    base_url: &str,
+    model: &str,
+    api_key: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("网络客户端初始化失败: {error}"))?;
+
+    let response = client
+        .post(chat_completions_url(base_url))
+        .bearer_auth(api_key)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .json(&build_generate_plan_body(model, system_prompt, user_prompt))
+        .send()
+        .await
+        .map_err(|error| format!("网络连接失败或 Base URL 不正确: {error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let message = if body.trim().is_empty() {
+            format!("服务商返回错误: HTTP {status}")
+        } else {
+            format!(
+                "服务商返回错误: HTTP {status} - {}",
+                trim_for_message(&body)
+            )
+        };
+        return Err(message);
+    }
+
+    let value = response
+        .json::<Value>()
+        .await
+        .map_err(|error| format!("服务商响应解析失败: {error}"))?;
+
+    value
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .map(|content| content.to_string())
+        .ok_or_else(|| "服务商响应格式异常，未找到 message.content".to_string())
+}
+
 fn has_choices(value: &Value) -> bool {
     value
         .get("choices")
@@ -135,6 +205,20 @@ mod tests {
         assert_eq!(body["stream"], false);
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(body["messages"][1]["content"], "Reply with OK.");
+    }
+
+    #[test]
+    fn generate_plan_body_has_expected_openai_compatible_shape() {
+        let body = build_generate_plan_body("test-model", "system", "user");
+
+        assert_eq!(body["model"], "test-model");
+        assert_eq!(body["temperature"], 0.3);
+        assert_eq!(body["max_tokens"], 1200);
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][0]["content"], "system");
+        assert_eq!(body["messages"][1]["role"], "user");
+        assert_eq!(body["messages"][1]["content"], "user");
     }
 
     #[test]
